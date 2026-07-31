@@ -49,7 +49,7 @@ app.use('/api/media', mediaRouter);
 
 app.get('/healthz', (_req, res) => res.json({ ok: true, timestamp: new Date().toISOString() }));
 
-// Socket.io Real-time Chat & Presentation Stage setup
+// Socket.io Real-time Chat & Permission Stage setup
 const io = new SocketIOServer(server, {
   cors: {
     origin: CLIENT_ORIGIN,
@@ -85,7 +85,6 @@ function sanitizeText(str) {
 
 io.on('connection', (socket) => {
   socket.on('join-room', ({ roomId }) => {
-    // Check if user is a member of room
     const isMember = db.prepare('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?').get(roomId, socket.user.id);
     if (!isMember) {
       return socket.emit('error-msg', { message: 'Not authorized to join chat in this room' });
@@ -121,7 +120,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Shared Presentation Screen Broadcast (Option B)
+  // Shared Presentation Screen Broadcast
   socket.on('share-presentation-media', ({ roomId, mediaUrl, mediaName, mediaType, presenterName }) => {
     io.to(roomId).emit('presentation-media-changed', {
       mediaUrl,
@@ -133,6 +132,25 @@ io.on('connection', (socket) => {
 
   socket.on('stop-presentation-media', ({ roomId }) => {
     io.to(roomId).emit('presentation-media-changed', null);
+  });
+
+  // Screen Share Permission Request (Participant -> Owner)
+  socket.on('request-screen-share-permission', ({ roomId, requesterName }) => {
+    const room = db.prepare('SELECT owner_id FROM rooms WHERE id = ?').get(roomId);
+    if (!room) return;
+
+    // Send request popup event to room
+    io.to(roomId).emit('screen-share-request-received', {
+      requesterSocketId: socket.id,
+      requesterUserId: socket.user.id,
+      requesterName: requesterName || socket.user.name,
+      ownerUserId: room.owner_id,
+    });
+  });
+
+  // Screen Share Permission Response (Owner -> Participant)
+  socket.on('respond-screen-share-permission', ({ requesterSocketId, allowed }) => {
+    io.to(requesterSocketId).emit('screen-share-permission-result', { allowed });
   });
 });
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Room, RoomEvent, Track } from 'livekit-client';
+import { Room, RoomEvent, Track, LocalVideoTrack } from 'livekit-client';
 import { io } from 'socket.io-client';
-import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff } from 'lucide-react';
+import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check } from 'lucide-react';
 import MediaInjector from './MediaInjector.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import EffectsPicker, { VIDEO_FILTERS, VIRTUAL_BACKGROUNDS } from './EffectsPicker.jsx';
@@ -52,6 +52,12 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
   // Shared Presentation Stage state
   const [sharedMedia, setSharedMedia] = useState(null);
+  const [isSharingScreen, setIsSharingScreen] = useState(false);
+
+  // Screen Share Permission & Approval State
+  const [isScreenShareApproved, setIsScreenShareApproved] = useState(false);
+  const [pendingPermissionRequest, setPendingPermissionRequest] = useState(null);
+  const [requestSentNotice, setRequestSentNotice] = useState(false);
 
   // Modals & Panels
   const [showInjector, setShowInjector] = useState(false);
@@ -70,6 +76,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
   const roomRef = useRef(null);
   const socketRef = useRef(null);
+  const screenTrackRef = useRef(null);
 
   const isOwner = roomData.owner_id === user.id;
 
@@ -84,7 +91,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     setTracks((prev) => prev.filter((t) => t.sid !== sid));
   }, []);
 
-  // Socket.io connection for snapshot & presentation broadcasts
+  // Socket.io connection for chat, snapshots, and screen share authorization
   useEffect(() => {
     const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
     const socket = io(serverUrl, { auth: { token } });
@@ -101,12 +108,31 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
     socket.on('presentation-media-changed', (mediaData) => {
       setSharedMedia(mediaData);
+      if (!mediaData) setIsSharingScreen(false);
+    });
+
+    // Owner receives permission request popup
+    socket.on('screen-share-request-received', (data) => {
+      if (isOwner && data.requesterUserId !== user.id) {
+        setPendingPermissionRequest(data);
+      }
+    });
+
+    // Participant receives permission response
+    socket.on('screen-share-permission-result', ({ allowed }) => {
+      setRequestSentNotice(false);
+      if (allowed) {
+        setIsScreenShareApproved(true);
+        startNativeScreenShare();
+      } else {
+        alert('The room creator denied your screen share request.');
+      }
     });
 
     return () => {
       socket.disconnect();
     };
-  }, [token, roomData.id]);
+  }, [token, roomData.id, isOwner, user.id]);
 
   // LiveKit connection
   useEffect(() => {
@@ -211,10 +237,86 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   };
 
   const handleStopPresentation = () => {
+    if (isSharingScreen && screenTrackRef.current) {
+      screenTrackRef.current.stop();
+      screenTrackRef.current = null;
+      setIsSharingScreen(false);
+    }
+
     if (socketRef.current) {
       socketRef.current.emit('stop-presentation-media', {
         roomId: roomData.id,
       });
+    }
+  };
+
+  // Screen Share trigger handler
+  const handleScreenShareClick = () => {
+    if (isSharingScreen) {
+      handleStopPresentation();
+      return;
+    }
+
+    if (isOwner || isScreenShareApproved) {
+      startNativeScreenShare();
+    } else {
+      // Request permission from room owner
+      if (socketRef.current) {
+        socketRef.current.emit('request-screen-share-permission', {
+          roomId: roomData.id,
+          requesterName: displayName,
+        });
+        setRequestSentNotice(true);
+      }
+    }
+  };
+
+  // Start native screen share via getDisplayMedia
+  const startNativeScreenShare = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true,
+      });
+
+      const videoTrack = stream.getVideoTracks()[0];
+      screenTrackRef.current = videoTrack;
+
+      videoTrack.onended = () => {
+        handleStopPresentation();
+      };
+
+      if (roomRef.current && videoTrack) {
+        const lkTrack = new LocalVideoTrack(videoTrack);
+        await roomRef.current.localParticipant.publishTrack(lkTrack);
+      }
+
+      setIsSharingScreen(true);
+
+      // Broadcast presentation stage notice
+      if (socketRef.current) {
+        socketRef.current.emit('share-presentation-media', {
+          roomId: roomData.id,
+          mediaUrl: '',
+          mediaName: 'Screen & Tab Watch Party',
+          mediaType: 'video/screenshare',
+          presenterName: displayName,
+        });
+      }
+    } catch (err) {
+      console.warn('Screen share canceled or failed:', err);
+      setRequestSentNotice(false);
+    }
+  };
+
+  // Owner responds to permission request
+  const handleRespondPermission = (allowed) => {
+    if (pendingPermissionRequest && socketRef.current) {
+      socketRef.current.emit('respond-screen-share-permission', {
+        requesterSocketId: pendingPermissionRequest.requesterSocketId,
+        allowed,
+      });
+      setPendingPermissionRequest(null);
     }
   };
 
@@ -233,7 +335,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           <button
             className="btn-outline"
             style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-            onClick={() => { setNewNickname(displayName); setShowRenameModal(false); }}
+            onClick={() => { setNewNickname(displayName); setShowRenameModal(true); }}
           >
             <Edit3 size={12} /> Rename
           </button>
@@ -312,6 +414,15 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         </button>
 
         <button
+          className={`control-btn ${isSharingScreen ? 'active' : ''}`}
+          onClick={handleScreenShareClick}
+          title={isOwner ? "Share Screen / Watch Party" : "Request Screen Share Permission from Room Creator"}
+          style={isSharingScreen ? { background: '#ec4899', color: '#fff' } : {}}
+        >
+          <Monitor size={20} />
+        </button>
+
+        <button
           className={`control-btn ${showEffects ? 'active' : ''}`}
           onClick={() => setShowEffects((prev) => !prev)}
           title="Video Filters & Virtual Backgrounds"
@@ -359,6 +470,46 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           <PhoneOff size={20} />
         </button>
       </footer>
+
+      {/* Request Sent Notice for Participant */}
+      {requestSentNotice && (
+        <div className="snapshot-toast-banner" style={{ background: 'linear-gradient(135deg, #6366f1, #818cf8)' }}>
+          ⌛ Permission request sent to room creator... Please wait for approval.
+        </div>
+      )}
+
+      {/* Owner Permission Request Popover Modal */}
+      {pendingPermissionRequest && (
+        <div className="modal-backdrop">
+          <div className="glass-card modal-box" style={{ width: '380px', border: '1px solid rgba(236, 72, 153, 0.5)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.125rem', marginBottom: '12px' }}>
+              <ShieldAlert size={22} color="#ec4899" /> Screen Share Permission Request
+            </div>
+
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+              Participant <strong>{pendingPermissionRequest.requesterName}</strong> wants to share their screen / browser tab in this call.
+            </p>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                className="btn-outline"
+                onClick={() => handleRespondPermission(false)}
+                style={{ flex: 1, color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+              >
+                Deny
+              </button>
+
+              <button
+                className="btn-primary"
+                onClick={() => handleRespondPermission(true)}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', background: 'linear-gradient(135deg, #10b981, #059669)' }}
+              >
+                <Check size={16} /> Allow Share
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Rename Modal */}
       {showRenameModal && (
