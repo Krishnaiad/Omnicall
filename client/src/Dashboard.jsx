@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from './api.js';
 import { io } from 'socket.io-client';
-import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X } from 'lucide-react';
+import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3 } from 'lucide-react';
 
-export default function Dashboard({ token, user, onLogout, onJoinCall }) {
+export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpdate }) {
   const [rooms, setRooms] = useState([]);
   const [clips, setClips] = useState([]);
   const [newRoomName, setNewRoomName] = useState('');
@@ -21,6 +21,12 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
   const [showAdminDirectory, setShowAdminDirectory] = useState(false);
   const [adminUsersList, setAdminUsersList] = useState([]);
   const [loadingAdminUsers, setLoadingAdminUsers] = useState(false);
+
+  // Profile Modal State
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [editName, setEditName] = useState(user.name || '');
+  const [editUsername, setEditUsername] = useState(user.username || '');
+  const [savingProfile, setSavingProfile] = useState(false);
 
   // Join Call Nickname Modal State
   const [joiningRoom, setJoiningRoom] = useState(null);
@@ -99,6 +105,34 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
   const handleOpenAdminDirectory = () => {
     setShowAdminDirectory(true);
     fetchAdminUsers();
+  };
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    if (!editName.trim() || !editUsername.trim()) return;
+    setSavingProfile(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:4000'}/api/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: editName.trim(), username: editUsername.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update profile');
+
+      setSuccess('Profile updated successfully!');
+      if (onUserUpdate) onUserUpdate(data.user, data.token);
+      setShowProfileModal(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleCreateRoom = async (e) => {
@@ -207,12 +241,6 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
     setJoiningRoom(null);
   };
 
-  const getMediaIcon = (mimeType) => {
-    if (mimeType.startsWith('image/')) return <Film size={18} color="#ec4899" />;
-    if (mimeType.startsWith('audio/')) return <Film size={18} color="#10b981" />;
-    return <Film size={18} color="#818cf8" />;
-  };
-
   return (
     <div className="dashboard-layout" style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px' }}>
       {/* Top Navbar */}
@@ -242,9 +270,17 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
             </button>
           )}
 
+          <button
+            className="btn-outline"
+            onClick={() => setShowProfileModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px', fontSize: '0.8125rem', borderColor: 'rgba(99, 102, 241, 0.4)', color: '#a5b4fc' }}
+          >
+            <UserCheck size={16} /> Profile (@{user.username || 'user'})
+          </button>
+
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#fff' }}>{user.name}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{user.username ? `@${user.username}` : user.email}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{user.email}</div>
           </div>
 
           <button className="btn-outline" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px', fontSize: '0.8125rem' }}>
@@ -253,8 +289,8 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
         </div>
       </nav>
 
-      {/* Modern Dashboard Quick Stat Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '28px' }}>
+      {/* Quick Stat Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '28px' }}>
         <div className="glass-card" style={{ padding: '20px', borderRadius: '14px', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', fontWeight: 600 }}>ACTIVE ROOMS</span>
@@ -271,17 +307,6 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff' }}>{clips.length}</div>
           <div style={{ fontSize: '0.75rem', color: '#f472b6', marginTop: '4px' }}>Uploaded & Streamable</div>
-        </div>
-
-        <div className="glass-card" style={{ padding: '20px', borderRadius: '14px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', fontWeight: 600 }}>NETWORK STATUS</span>
-            <Activity size={18} color="#10b981" />
-          </div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#34d399', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#34d399', boxShadow: '0 0 10px #34d399' }} /> Livekit Cloud Online
-          </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>wss://omnicall-gfhd6nn2.livekit.cloud</div>
         </div>
       </div>
 
@@ -451,6 +476,60 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
           )}
         </div>
       </div>
+
+      {/* User Profile Edit Modal */}
+      {showProfileModal && (
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+          <div className="glass-card modal-box" style={{ width: '400px', padding: '24px', borderRadius: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.125rem', color: '#a5b4fc' }}>
+                <Edit3 size={20} /> Update Account Profile
+              </div>
+              <button onClick={() => setShowProfileModal(false)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProfile}>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Full Display Name</label>
+                <input
+                  className="form-control"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  maxLength={50}
+                  required
+                />
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Unique Username (@)</label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#a5b4fc', fontWeight: 600 }}>@</span>
+                  <input
+                    className="form-control"
+                    style={{ paddingLeft: '28px' }}
+                    value={editUsername}
+                    onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                    maxLength={30}
+                    required
+                  />
+                </div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>Unique handle used by others to invite you to calls.</span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="button" className="btn-outline" onClick={() => setShowProfileModal(false)} style={{ flex: 1, borderRadius: '8px' }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary" disabled={savingProfile} style={{ flex: 1, borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1, #4f46e5)' }}>
+                  {savingProfile ? 'Saving...' : 'Save Profile'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Admin User Directory Modal */}
       {showAdminDirectory && (

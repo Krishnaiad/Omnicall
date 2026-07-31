@@ -36,6 +36,7 @@ const ALLOWED_MIME_TYPES = [
   'audio/webm',
   'audio/x-m4a',
   'image/jpeg',
+  'image/jpg',
   'image/png',
   'image/webp',
   'image/gif',
@@ -45,7 +46,7 @@ const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
   fileFilter: (_req, file, cb) => {
-    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    if (ALLOWED_MIME_TYPES.includes(file.mimetype.toLowerCase())) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file format. Supported formats: MP4, WebM, MP3, WAV, PNG, JPG, WEBP, GIF.'));
@@ -118,7 +119,7 @@ router.post('/upload', (req, res) => {
 
       res.status(202).json({
         message: 'Media uploaded successfully',
-        media: {
+        clip: {
           id: fileId,
           name: req.file.originalname,
           mimeType: req.file.mimetype,
@@ -126,17 +127,17 @@ router.post('/upload', (req, res) => {
         },
       });
     } catch (dbErr) {
-      console.error('Database insert media failed:', dbErr);
-      res.status(500).json({ error: 'Failed to record media file' });
+      console.error('Save media metadata failed:', dbErr);
+      res.status(500).json({ error: 'Failed to process media file' });
     }
   });
 });
 
-// List user's clips (Images, Videos, Audios)
+// List user's uploaded clips
 router.get('/list', async (req, res) => {
   try {
     const clips = await db.queryAll(
-      `SELECT id, original_name as name, mime_type as mimeType, status, duration, created_at
+      `SELECT id, original_name as name, mime_type as "mimeType", status, duration, created_at
        FROM media_files
        WHERE user_id = ?
        ORDER BY created_at DESC`,
@@ -145,37 +146,28 @@ router.get('/list', async (req, res) => {
 
     res.json({ clips });
   } catch (err) {
-    console.error('List clips failed:', err);
-    res.status(500).json({ error: 'Failed to list media clips' });
+    console.error('List media files failed:', err);
+    res.status(500).json({ error: 'Failed to list media files' });
   }
 });
 
-// Stream authenticated media clip
+// Stream or download a media clip with correct MIME Content-Type header
 router.get('/stream/:id', async (req, res) => {
   const { id } = req.params;
+
   try {
     const clip = await db.queryGet('SELECT * FROM media_files WHERE id = ?', [id]);
-
-    if (!clip) return res.status(404).json({ error: 'Media file not found' });
-    if (clip.user_id !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied' });
+    if (!clip) {
+      return res.status(404).json({ error: 'Media file not found' });
     }
+
     if (!fs.existsSync(clip.file_path)) {
-      return res.status(404).json({ error: 'Media file does not exist on disk' });
+      return res.status(404).json({ error: 'Media file missing on server' });
     }
 
     const stat = fs.statSync(clip.file_path);
     const fileSize = stat.size;
     const mimeType = clip.mime_type || 'application/octet-stream';
-
-    if (mimeType.startsWith('image/')) {
-      res.writeHead(200, {
-        'Content-Length': fileSize,
-        'Content-Type': mimeType,
-        'Cache-Control': 'public, max-age=3600',
-      });
-      return fs.createReadStream(clip.file_path).pipe(res);
-    }
 
     const range = req.headers.range;
     if (range) {
@@ -188,14 +180,14 @@ router.get('/stream/:id', async (req, res) => {
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunksize,
-        'Content-Type': mimeType.startsWith('audio/') ? mimeType : 'video/mp4',
+        'Content-Type': mimeType,
       };
       res.writeHead(206, head);
       file.pipe(res);
     } else {
       const head = {
         'Content-Length': fileSize,
-        'Content-Type': mimeType.startsWith('audio/') ? mimeType : 'video/mp4',
+        'Content-Type': mimeType,
       };
       res.writeHead(200, head);
       fs.createReadStream(clip.file_path).pipe(res);

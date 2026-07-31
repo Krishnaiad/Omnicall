@@ -118,6 +118,28 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Fetch persistent chat messages for a room
+router.get('/:roomId/messages', async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+
+    const rows = await db.queryAll(
+      `SELECT id, sender_id as "senderId", sender_name as "senderName", message as text, created_at as timestamp
+       FROM chat_messages
+       WHERE room_id = ?
+       ORDER BY created_at ASC`,
+      [roomId]
+    );
+
+    res.json({ messages: rows });
+  } catch (err) {
+    console.error('Fetch chat messages failed:', err);
+    res.status(500).json({ error: 'Failed to load chat history' });
+  }
+});
+
 // Invite a user by Username OR Email. Owner only.
 router.post('/:roomId/invite', async (req, res) => {
   const { roomId } = req.params;

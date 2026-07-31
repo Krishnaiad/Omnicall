@@ -23,6 +23,15 @@ export default function App() {
     localStorage.setItem('omnicall_user', JSON.stringify(newUser));
   };
 
+  const handleUserUpdate = (newUser, newToken) => {
+    setUser(newUser);
+    localStorage.setItem('omnicall_user', JSON.stringify(newUser));
+    if (newToken) {
+      setToken(newToken);
+      localStorage.setItem('omnicall_token', newToken);
+    }
+  };
+
   const handleLogout = () => {
     setToken(null);
     setUser(null);
@@ -75,6 +84,7 @@ export default function App() {
       user={user}
       onLogout={handleLogout}
       onJoinCall={handleJoinCall}
+      onUserUpdate={handleUserUpdate}
     />
   );
 }

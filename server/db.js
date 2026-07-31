@@ -34,7 +34,6 @@ if (DATABASE_URL) {
   console.log('[DB] Running on Local SQLite Database...');
 }
 
-// Universal DB Interface Wrapper
 export const db = {
   exec: async (sql) => {
     if (isPg) {
@@ -103,7 +102,7 @@ export const db = {
   },
 };
 
-// Initialize Tables
+// Initialize Tables & Add Missing Columns
 async function initTables() {
   const createTablesSql = `
     CREATE TABLE IF NOT EXISTS users (
@@ -111,6 +110,7 @@ async function initTables() {
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       name TEXT NOT NULL,
+      username TEXT UNIQUE,
       role TEXT DEFAULT 'user',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -153,6 +153,7 @@ async function initTables() {
 
   try {
     await db.exec(createTablesSql);
+    try { await db.exec('ALTER TABLE users ADD COLUMN username TEXT'); } catch (_) {}
   } catch (err) {
     console.warn('[DB] Table initialization notice:', err.message);
   }
@@ -164,6 +165,7 @@ export async function seedAdminUser() {
 
   const adminEmail = (process.env.ADMIN_EMAIL || 'admin@omnicall.com').toLowerCase().trim();
   const adminName = 'Admin';
+  const adminUsername = 'admin';
   const rawPassword = process.env.ADMIN_PASSWORD || 'adminomnicall@12';
 
   try {
@@ -172,12 +174,12 @@ export async function seedAdminUser() {
       const passwordHash = await bcrypt.hash(rawPassword, 12);
       const adminId = randomUUID();
       await db.queryRun(
-        'INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)',
-        [adminId, adminEmail, passwordHash, adminName, 'admin']
+        'INSERT INTO users (id, email, password_hash, name, username, role) VALUES (?, ?, ?, ?, ?, ?)',
+        [adminId, adminEmail, passwordHash, adminName, adminUsername, 'admin']
       );
       console.log(`[DB] Designated Admin user initialized: ${adminEmail}`);
     } else {
-      await db.queryRun('UPDATE users SET role = ? WHERE email = ?', ['admin', adminEmail]);
+      await db.queryRun('UPDATE users SET role = ?, username = ? WHERE email = ?', ['admin', adminUsername, adminEmail]);
     }
   } catch (err) {
     console.error('[DB] Admin seeding notice:', err.message);

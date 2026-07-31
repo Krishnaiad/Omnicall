@@ -15,7 +15,7 @@ function getSecret() {
 
 export function signToken(user) {
   return jwt.sign(
-    { sub: user.id, email: user.email, name: user.name, role: user.role || 'user' },
+    { sub: user.id, email: user.email, name: user.name, username: user.username, role: user.role || 'user' },
     getSecret(),
     { expiresIn: '7d' }
   );
@@ -23,7 +23,7 @@ export function signToken(user) {
 
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, name } = req.body || {};
+    const { email, password, name, username } = req.body || {};
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'Email, password, and name are required' });
     }
@@ -43,16 +43,22 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
+    let assignedUsername = (username && username.trim()) ? username.trim().toLowerCase() : normalizedEmail.split('@')[0];
+    const usernameTaken = await db.queryGet('SELECT id FROM users WHERE LOWER(username) = ?', [assignedUsername]);
+    if (usernameTaken) {
+      assignedUsername = `${assignedUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+
     const assignedRole = normalizedEmail === ADMIN_EMAIL ? 'admin' : 'user';
 
     const passwordHash = await bcrypt.hash(password, 12);
     const id = randomUUID();
     await db.queryRun(
-      'INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)',
-      [id, normalizedEmail, passwordHash, name.trim(), assignedRole]
+      'INSERT INTO users (id, email, password_hash, name, username, role) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, normalizedEmail, passwordHash, name.trim(), assignedUsername, assignedRole]
     );
 
-    const user = { id, email: normalizedEmail, name: name.trim(), role: assignedRole };
+    const user = { id, email: normalizedEmail, name: name.trim(), username: assignedUsername, role: assignedRole };
     res.status(201).json({ token: signToken(user), user });
   } catch (err) {
     console.error('Register failed:', err);
@@ -75,7 +81,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const user = { id: row.id, email: row.email, name: row.name, role: row.role || 'user' };
+    const user = { id: row.id, email: row.email, name: row.name, username: row.username, role: row.role || 'user' };
     res.json({ token: signToken(user), user });
   } catch (err) {
     console.error('Login failed:', err);
@@ -92,7 +98,7 @@ export function requireAuth(req, res, next) {
 
   try {
     const payload = jwt.verify(token, getSecret());
-    req.user = { id: payload.sub, email: payload.email, name: payload.name, role: payload.role || 'user' };
+    req.user = { id: payload.sub, email: payload.email, name: payload.name, username: payload.username, role: payload.role || 'user' };
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
@@ -106,10 +112,54 @@ export function requireAdmin(req, res, next) {
   next();
 }
 
+// Profile update endpoint — with unique username enforcement
+router.put('/profile', requireAuth, async (req, res) => {
+  const { name, username } = req.body || {};
+  if (!name || !name.trim() || !username || !username.trim()) {
+    return res.status(400).json({ error: 'Name and Username are required' });
+  }
+
+  const cleanName = name.trim().slice(0, 50);
+  const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+
+  if (cleanUsername.length < 3) {
+    return res.status(400).json({ error: 'Username must be at least 3 alphanumeric characters long' });
+  }
+
+  try {
+    const existing = await db.queryGet(
+      'SELECT id FROM users WHERE LOWER(username) = ? AND id != ?',
+      [cleanUsername, req.user.id]
+    );
+
+    if (existing) {
+      return res.status(409).json({ error: `Username "@${cleanUsername}" is already taken. Please choose another username.` });
+    }
+
+    await db.queryRun(
+      'UPDATE users SET name = ?, username = ? WHERE id = ?',
+      [cleanName, cleanUsername, req.user.id]
+    );
+
+    const updatedUser = {
+      id: req.user.id,
+      email: req.user.email,
+      name: cleanName,
+      username: cleanUsername,
+      role: req.user.role,
+    };
+
+    res.json({ ok: true, user: updatedUser, token: signToken(updatedUser) });
+  } catch (err) {
+    console.error('Update profile failed:', err);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
 // Protected Admin Directory Endpoint
 router.get('/users', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const users = await db.queryAll('SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC');
+    const users = await db.queryAll('SELECT id, name, username, email, role, created_at FROM users ORDER BY created_at DESC');
     res.json({ users });
   } catch (err) {
     console.error('List users failed:', err);

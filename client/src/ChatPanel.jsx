@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import DOMPurify from 'dompurify';
 import { Send, X, Smile } from 'lucide-react';
@@ -10,8 +10,27 @@ export default function ChatPanel({ token, roomId, onClose }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [showEmojis, setShowEmojis] = useState(true);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:4000'}/api/rooms/${roomId}/messages`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.messages) setMessages(data.messages);
+      } catch (err) {
+        console.error('Failed to load chat history:', err);
+      }
+    };
+
+    fetchHistory();
+
     const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
     const s = io(serverUrl, {
       auth: { token },
@@ -31,6 +50,10 @@ export default function ChatPanel({ token, roomId, onClose }) {
       s.disconnect();
     };
   }, [token, roomId]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const handleSend = (e) => {
     e.preventDefault();
@@ -69,6 +92,7 @@ export default function ChatPanel({ token, roomId, onClose }) {
             </div>
           ))
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {showEmojis && (

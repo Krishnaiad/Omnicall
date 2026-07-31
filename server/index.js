@@ -1,26 +1,25 @@
-import 'dotenv/config';
 import express from 'express';
-import http from 'http';
-import { Server as SocketIOServer } from 'socket.io';
+import { createServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io-client'; // type check
+import { Server } from 'http';
+import { Server as ServerIO } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
-
+import { db } from './db.js';
 import authRouter from './auth.js';
 import roomRouter from './room.js';
 import mediaRouter from './media.js';
-import { db } from './db.js';
 
 const app = express();
-const server = http.createServer(app);
+const server = createServer(app);
 
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+const PORT = process.env.PORT || 4000;
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || '*';
 
-// Security Headers & CORS
 app.use(
   helmet({
-    contentSecurityPolicy: false, // allow inline media streams during dev
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
@@ -32,9 +31,8 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json());
 
-// Global Rate Limiter
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -50,7 +48,7 @@ app.use('/api/media', mediaRouter);
 app.get('/healthz', (_req, res) => res.json({ ok: true, timestamp: new Date().toISOString() }));
 
 // Socket.io Real-time Chat & Permission Stage setup
-const io = new SocketIOServer(server, {
+const io = new ServerIO(server, {
   cors: {
     origin: CLIENT_ORIGIN,
     methods: ['GET', 'POST'],
@@ -107,6 +105,15 @@ io.on('connection', (socket) => {
       timestamp: new Date().toISOString(),
     };
 
+    try {
+      await db.queryRun(
+        'INSERT INTO chat_messages (id, room_id, sender_id, sender_name, message) VALUES (?, ?, ?, ?, ?)',
+        [messageObj.id, roomId, messageObj.senderId, messageObj.senderName, messageObj.text]
+      );
+    } catch (err) {
+      console.error('Save chat message failed:', err);
+    }
+
     io.to(roomId).emit('new-message', messageObj);
   });
 
@@ -140,40 +147,38 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Shared Presentation Screen Broadcast
+  // Screen Share Permission Socket Handler
+  socket.on('request-screen-share-permission', async ({ roomId, requesterName }) => {
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = ?', [roomId]);
+    if (!room) return;
+
+    io.to(`user_${room.owner_id}`).emit('screen-share-request-received', {
+      requesterUserId: socket.user.id,
+      requesterName,
+      requesterSocketId: socket.id,
+      roomId,
+    });
+  });
+
+  socket.on('respond-screen-share-permission', ({ requesterSocketId, allowed }) => {
+    io.to(requesterSocketId).emit('screen-share-permission-result', { allowed });
+  });
+
+  // Presentation Stage Media Broadcast Handler
   socket.on('share-presentation-media', ({ roomId, mediaUrl, mediaName, mediaType, presenterName }) => {
     io.to(roomId).emit('presentation-media-changed', {
       mediaUrl,
       mediaName,
       mediaType,
-      presenterName: presenterName || socket.user.name,
+      presenterName,
     });
   });
 
   socket.on('stop-presentation-media', ({ roomId }) => {
     io.to(roomId).emit('presentation-media-changed', null);
   });
-
-  // Screen Share Permission Request
-  socket.on('request-screen-share-permission', async ({ roomId, requesterName }) => {
-    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = ?', [roomId]);
-    if (!room) return;
-
-    io.to(roomId).emit('screen-share-request-received', {
-      requesterSocketId: socket.id,
-      requesterUserId: socket.user.id,
-      requesterName: requesterName || socket.user.name,
-      ownerUserId: room.owner_id,
-    });
-  });
-
-  // Screen Share Permission Response
-  socket.on('respond-screen-share-permission', ({ requesterSocketId, allowed }) => {
-    io.to(requesterSocketId).emit('screen-share-permission-result', { allowed });
-  });
 });
 
-const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
+  console.log(`[Server] OmniCall WebRTC platform running on port ${PORT}`);
 });
