@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { api } from './api.js';
-import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, UserCheck, X, Image as ImageIcon, Music, Users, Shield } from 'lucide-react';
+import { io } from 'socket.io-client';
+import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, UserCheck, X, Image as ImageIcon, Music, Users, Shield, Bell } from 'lucide-react';
 
 export default function Dashboard({ token, user, onLogout, onJoinCall }) {
   const [rooms, setRooms] = useState([]);
@@ -13,6 +14,9 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
   const [loadingRooms, setLoadingRooms] = useState(true);
   const [uploading, setUploading] = useState(false);
 
+  // Real-time Invite Notice Banner
+  const [inviteNotice, setInviteNotice] = useState(null);
+
   // Admin User Directory Modal State
   const [showAdminDirectory, setShowAdminDirectory] = useState(false);
   const [adminUsersList, setAdminUsersList] = useState([]);
@@ -22,6 +26,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
   const [joiningRoom, setJoiningRoom] = useState(null);
   const [customNickname, setCustomNickname] = useState('');
 
+  const socketRef = useRef(null);
   const isAdmin = user && user.role === 'admin';
 
   const fetchRooms = async () => {
@@ -29,7 +34,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
       const data = await api.listRooms(token);
       setRooms(data.rooms || []);
     } catch (err) {
-      setError(err.message);
+      console.error('Failed to fetch rooms:', err);
     } finally {
       setLoadingRooms(false);
     }
@@ -57,10 +62,33 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
     }
   };
 
+  // Real-time Socket.io invite notifications & 5-second polling interval
   useEffect(() => {
     fetchRooms();
     fetchClips();
-  }, [token]);
+
+    const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
+    const socket = io(serverUrl, { auth: { token } });
+    socketRef.current = socket;
+
+    socket.on('room-invited-notice', (data) => {
+      if (data.inviteeUserId === user.id) {
+        setInviteNotice(`🎉 You were invited to room: "${data.roomName}"!`);
+        fetchRooms();
+        setTimeout(() => setInviteNotice(null), 5000);
+      }
+    });
+
+    // Auto-refresh rooms every 5 seconds
+    const interval = setInterval(() => {
+      fetchRooms();
+    }, 5000);
+
+    return () => {
+      socket.disconnect();
+      clearInterval(interval);
+    };
+  }, [token, user.id]);
 
   const handleOpenAdminDirectory = () => {
     setShowAdminDirectory(true);
@@ -173,6 +201,13 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
           </button>
         </div>
       </nav>
+
+      {/* Real-time Invite Toast Banner */}
+      {inviteNotice && (
+        <div className="error-banner" style={{ background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(236, 72, 153, 0.9))', color: '#fff', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Bell size={18} /> {inviteNotice}
+        </div>
+      )}
 
       {error && <div className="error-banner" style={{ marginBottom: '20px' }}>{error}</div>}
       {success && <div className="error-banner" style={{ background: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.4)', color: '#6ee7b7', marginBottom: '20px' }}>{success}</div>}

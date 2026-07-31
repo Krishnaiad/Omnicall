@@ -57,6 +57,8 @@ const io = new SocketIOServer(server, {
   },
 });
 
+app.set('io', io);
+
 // Middleware: Authenticate Socket connection via JWT
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
@@ -84,8 +86,11 @@ function sanitizeText(str) {
 }
 
 io.on('connection', (socket) => {
-  socket.on('join-room', ({ roomId }) => {
-    const isMember = db.prepare('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?').get(roomId, socket.user.id);
+  // Join user's personal channel for direct notifications
+  socket.join(`user_${socket.user.id}`);
+
+  socket.on('join-room', async ({ roomId }) => {
+    const isMember = await db.queryGet('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?', [roomId, socket.user.id]);
     if (!isMember) {
       return socket.emit('error-msg', { message: 'Not authorized to join chat in this room' });
     }
@@ -108,8 +113,8 @@ io.on('connection', (socket) => {
   });
 
   // Room Owner Snapshot Broadcast Notification
-  socket.on('snapshot-taken', ({ roomId, displayName }) => {
-    const room = db.prepare('SELECT owner_id FROM rooms WHERE id = ?').get(roomId);
+  socket.on('snapshot-taken', async ({ roomId, displayName }) => {
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = ?', [roomId]);
     if (!room || room.owner_id !== socket.user.id) {
       return socket.emit('error-msg', { message: 'Only the room owner can capture snapshots' });
     }
@@ -134,12 +139,11 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('presentation-media-changed', null);
   });
 
-  // Screen Share Permission Request (Participant -> Owner)
-  socket.on('request-screen-share-permission', ({ roomId, requesterName }) => {
-    const room = db.prepare('SELECT owner_id FROM rooms WHERE id = ?').get(roomId);
+  // Screen Share Permission Request
+  socket.on('request-screen-share-permission', async ({ roomId, requesterName }) => {
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = ?', [roomId]);
     if (!room) return;
 
-    // Send request popup event to room
     io.to(roomId).emit('screen-share-request-received', {
       requesterSocketId: socket.id,
       requesterUserId: socket.user.id,
@@ -148,7 +152,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Screen Share Permission Response (Owner -> Participant)
+  // Screen Share Permission Response
   socket.on('respond-screen-share-permission', ({ requesterSocketId, allowed }) => {
     io.to(requesterSocketId).emit('screen-share-permission-result', { allowed });
   });

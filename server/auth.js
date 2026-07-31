@@ -38,22 +38,18 @@ router.post('/register', async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail);
+    const existing = await db.queryGet('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
-    // Role Assignment: Only ADMIN_EMAIL gets 'admin' role. All other registrations are strictly 'user'.
     const assignedRole = normalizedEmail === ADMIN_EMAIL ? 'admin' : 'user';
 
     const passwordHash = await bcrypt.hash(password, 12);
     const id = randomUUID();
-    db.prepare('INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)').run(
-      id,
-      normalizedEmail,
-      passwordHash,
-      name.trim(),
-      assignedRole
+    await db.queryRun(
+      'INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)',
+      [id, normalizedEmail, passwordHash, name.trim(), assignedRole]
     );
 
     const user = { id, email: normalizedEmail, name: name.trim(), role: assignedRole };
@@ -72,7 +68,7 @@ router.post('/login', async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const row = db.prepare('SELECT * FROM users WHERE email = ?').get(normalizedEmail);
+    const row = await db.queryGet('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
     const valid = row ? await bcrypt.compare(password, row.password_hash) : false;
 
     if (!row || !valid) {
@@ -111,9 +107,14 @@ export function requireAdmin(req, res, next) {
 }
 
 // Protected Admin Directory Endpoint
-router.get('/users', requireAuth, requireAdmin, (req, res) => {
-  const users = db.prepare('SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC').all();
-  res.json({ users });
+router.get('/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const users = await db.queryAll('SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC');
+    res.json({ users });
+  } catch (err) {
+    console.error('List users failed:', err);
+    res.status(500).json({ error: 'Failed to fetch user directory' });
+  }
 });
 
 export default router;

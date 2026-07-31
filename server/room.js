@@ -6,12 +6,13 @@ import { requireAuth } from './auth.js';
 const router = Router();
 router.use(requireAuth);
 
-function isMember(roomId, userId) {
-  return !!db.prepare('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?').get(roomId, userId);
+async function isMember(roomId, userId) {
+  const row = await db.queryGet('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?', [roomId, userId]);
+  return !!row;
 }
 
 // Create a room. Creator becomes owner and first member.
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { name } = req.body || {};
   if (!name || !name.trim() || name.length > 80) {
     return res.status(400).json({ error: 'Room name is required (max 80 characters)' });
@@ -19,57 +20,68 @@ router.post('/', (req, res) => {
 
   const id = randomUUID();
   try {
-    db.exec('BEGIN TRANSACTION');
-    db.prepare('INSERT INTO rooms (id, name, owner_id) VALUES (?, ?, ?)').run(id, name.trim(), req.user.id);
-    db.prepare('INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, ?)').run(id, req.user.id, 'owner');
-    db.exec('COMMIT');
+    await db.queryRun('INSERT INTO rooms (id, name, owner_id) VALUES (?, ?, ?)', [id, name.trim(), req.user.id]);
+    await db.queryRun('INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, ?)', [id, req.user.id, 'owner']);
     res.status(201).json({ id, name: name.trim(), owner_id: req.user.id, role: 'owner' });
   } catch (err) {
-    try { db.exec('ROLLBACK'); } catch {}
     console.error('Create room failed:', err);
     res.status(500).json({ error: 'Failed to create room' });
   }
 });
 
 // List rooms the current user is a member of.
-router.get('/', (req, res) => {
-  const rooms = db
-    .prepare(
+router.get('/', async (req, res) => {
+  try {
+    const rooms = await db.queryAll(
       `SELECT rooms.id, rooms.name, rooms.owner_id, room_members.role, rooms.created_at
        FROM rooms
        JOIN room_members ON room_members.room_id = rooms.id
        WHERE room_members.user_id = ?
-       ORDER BY rooms.created_at DESC`
-    )
-    .all(req.user.id);
+       ORDER BY rooms.created_at DESC`,
+      [req.user.id]
+    );
 
-  res.json({ rooms });
+    res.json({ rooms });
+  } catch (err) {
+    console.error('List rooms failed:', err);
+    res.status(500).json({ error: 'Failed to list rooms' });
+  }
 });
 
 // Add an existing user (by email) to a room. Owner only.
-router.post('/:roomId/invite', (req, res) => {
+router.post('/:roomId/invite', async (req, res) => {
   const { roomId } = req.params;
   const { email } = req.body || {};
 
-  const room = db.prepare('SELECT * FROM rooms WHERE id = ?').get(roomId);
-  if (!room) return res.status(404).json({ error: 'Room not found' });
-  if (room.owner_id !== req.user.id) {
-    return res.status(403).json({ error: 'Only the room owner can invite members' });
+  try {
+    const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the room owner can invite members' });
+    }
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+
+    const invitee = await db.queryGet('SELECT * FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+    if (!invitee) {
+      return res.status(404).json({ error: 'No account found with that email. Please ask them to sign up first.' });
+    }
+
+    const existingMember = await db.queryGet('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?', [roomId, invitee.id]);
+    if (!existingMember) {
+      await db.queryRun('INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, ?)', [roomId, invitee.id, 'member']);
+    }
+
+    // Emit Real-time Socket.io Notification to Invited User
+    if (req.app.get('io')) {
+      const io = req.app.get('io');
+      io.emit('room-invited-notice', { inviteeUserId: invitee.id, roomId, roomName: room.name });
+    }
+
+    res.json({ ok: true, member: { id: invitee.id, email: invitee.email, name: invitee.name } });
+  } catch (err) {
+    console.error('Invite user failed:', err);
+    res.status(500).json({ error: 'Failed to invite user to room' });
   }
-  if (!email) return res.status(400).json({ error: 'Email is required' });
-
-  const invitee = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim());
-  if (!invitee) {
-    return res.status(404).json({ error: 'No account found with that email. Please ask them to sign up first.' });
-  }
-
-  db.prepare('INSERT OR IGNORE INTO room_members (room_id, user_id, role) VALUES (?, ?, ?)').run(
-    roomId,
-    invitee.id,
-    'member'
-  );
-
-  res.json({ ok: true, member: { id: invitee.id, email: invitee.email, name: invitee.name } });
 });
 
 // Issue a LiveKit access token — with unique identity + custom display name
@@ -78,24 +90,30 @@ router.post('/:roomId/token', async (req, res) => {
   const { displayName } = req.body || {};
   const { LIVEKIT_API_KEY, LIVEKIT_API_SECRET } = process.env;
 
-  const room = db.prepare('SELECT * FROM rooms WHERE id = ?').get(roomId);
-  if (!room) return res.status(404).json({ error: 'Room not found' });
-  if (!isMember(roomId, req.user.id)) {
-    return res.status(403).json({ error: 'You are not a member of this room' });
-  }
-  if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
-    return res.status(500).json({ error: 'Server is missing LiveKit credentials' });
-  }
-
-  const effectiveName = (displayName && displayName.trim()) ? displayName.trim().slice(0, 50) : req.user.name;
-  // Ensure participant identity is unique per user to prevent collision errors
-  const uniqueIdentity = `${req.user.id}_${effectiveName}`;
-
   try {
-    const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+    const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) {
+      return res.status(403).json({ error: 'You are not a member of this room' });
+    }
+
+    const apiKey = (LIVEKIT_API_KEY || '').trim();
+    const apiSecret = (LIVEKIT_API_SECRET || '').trim();
+
+    if (!apiKey || !apiSecret) {
+      console.error('Server missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET!');
+      return res.status(500).json({ error: 'Server is missing LiveKit credentials' });
+    }
+
+    const effectiveName = (displayName && displayName.trim()) ? displayName.trim().slice(0, 50) : req.user.name;
+    const uniqueIdentity = `${req.user.id}_${Date.now()}`;
+
+    const at = new AccessToken(apiKey, apiSecret, {
       identity: uniqueIdentity,
       name: effectiveName,
-      ttl: '30m',
+      ttl: '2h',
     });
     at.addGrant({ roomJoin: true, room: roomId, canPublish: true, canSubscribe: true });
 
@@ -103,7 +121,7 @@ router.post('/:roomId/token', async (req, res) => {
     res.json({ token, roomName: room.name, roomId: room.id, displayName: effectiveName });
   } catch (err) {
     console.error('Failed to mint call token:', err);
-    res.status(500).json({ error: 'Failed to create access token' });
+    res.status(500).json({ error: 'Failed to create access token: ' + err.message });
   }
 });
 
