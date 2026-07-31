@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from './api.js';
 import { io } from 'socket.io-client';
-import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Sparkles, Activity, Server, Radio, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X } from 'lucide-react';
 
 export default function Dashboard({ token, user, onLogout, onJoinCall }) {
   const [rooms, setRooms] = useState([]);
@@ -25,6 +25,14 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
   // Join Call Nickname Modal State
   const [joiningRoom, setJoiningRoom] = useState(null);
   const [customNickname, setCustomNickname] = useState('');
+
+  // Delete Room Modal State
+  const [deletingRoomTarget, setDeletingRoomTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Leave Room Modal State
+  const [leavingRoomTarget, setLeavingRoomTarget] = useState(null);
+  const [leaving, setLeaving] = useState(false);
 
   const socketRef = useRef(null);
   const isAdmin = user && user.role === 'admin';
@@ -108,29 +116,37 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
     }
   };
 
-  const handleDeleteRoom = async (roomId, roomName) => {
-    if (!window.confirm(`Are you sure you want to permanently delete room "${roomName}"?`)) return;
+  const confirmDeleteRoom = async () => {
+    if (!deletingRoomTarget) return;
+    setDeleting(true);
     setError('');
     setSuccess('');
     try {
-      await api.deleteRoom(token, roomId);
-      setSuccess(`Room "${roomName}" deleted successfully.`);
-      fetchRooms();
+      await api.deleteRoom(token, deletingRoomTarget.id);
+      setSuccess(`Room "${deletingRoomTarget.name}" deleted successfully.`);
+      setRooms((prev) => prev.filter((r) => r.id !== deletingRoomTarget.id));
+      setDeletingRoomTarget(null);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
-  const handleLeaveRoom = async (roomId, roomName) => {
-    if (!window.confirm(`Are you sure you want to leave room "${roomName}"?`)) return;
+  const confirmLeaveRoom = async () => {
+    if (!leavingRoomTarget) return;
+    setLeaving(true);
     setError('');
     setSuccess('');
     try {
-      await api.leaveRoom(token, roomId);
-      setSuccess(`Left room "${roomName}".`);
-      fetchRooms();
+      await api.leaveRoom(token, leavingRoomTarget.id);
+      setSuccess(`Left room "${leavingRoomTarget.name}".`);
+      setRooms((prev) => prev.filter((r) => r.id !== leavingRoomTarget.id));
+      setLeavingRoomTarget(null);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setLeaving(false);
     }
   };
 
@@ -191,10 +207,16 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
     setJoiningRoom(null);
   };
 
+  const getMediaIcon = (mimeType) => {
+    if (mimeType.startsWith('image/')) return <Film size={18} color="#ec4899" />;
+    if (mimeType.startsWith('audio/')) return <Film size={18} color="#10b981" />;
+    return <Film size={18} color="#818cf8" />;
+  };
+
   return (
     <div className="dashboard-layout" style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px' }}>
       {/* Top Navbar */}
-      <nav className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', marginBottom: '28px', border: '1px solid rgba(129, 140, 248, 0.25)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+      <nav className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', marginBottom: '28px', border: '1px solid rgba(129, 140, 248, 0.25)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)', borderRadius: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ background: 'linear-gradient(135deg, #6366f1, #ec4899)', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(99, 102, 241, 0.4)' }}>
             <Video size={24} color="#fff" />
@@ -337,7 +359,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
                       {room.role === 'owner' ? (
                         <button
                           className="btn-outline"
-                          onClick={() => handleDeleteRoom(room.id, room.name)}
+                          onClick={() => setDeletingRoomTarget(room)}
                           title="Delete Room permanently (Owner Only)"
                           style={{ padding: '6px 10px', borderRadius: '8px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(239,68,68,0.1)' }}
                         >
@@ -346,7 +368,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
                       ) : (
                         <button
                           className="btn-outline"
-                          onClick={() => handleLeaveRoom(room.id, room.name)}
+                          onClick={() => setLeavingRoomTarget(room)}
                           title="Leave Room"
                           style={{ padding: '6px 10px', borderRadius: '8px', color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.4)', background: 'rgba(245,158,11,0.1)' }}
                         >
@@ -432,7 +454,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
 
       {/* Admin User Directory Modal */}
       {showAdminDirectory && (
-        <div className="modal-backdrop">
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
           <div className="glass-card modal-box" style={{ width: '560px', padding: '24px', borderRadius: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.125rem', color: '#f472b6' }}>
@@ -475,9 +497,71 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
         </div>
       )}
 
+      {/* Custom Delete Room Modal */}
+      {deletingRoomTarget && (
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+          <div className="glass-card modal-box" style={{ width: '380px', padding: '24px', borderRadius: '16px', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700, fontSize: '1.125rem', color: '#ef4444', marginBottom: '12px' }}>
+              <AlertTriangle size={22} /> Confirm Room Deletion
+            </div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+              Are you sure you want to permanently delete room <strong>"{deletingRoomTarget.name}"</strong>? All members and in-call chat data will be removed.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                className="btn-outline"
+                onClick={() => setDeletingRoomTarget(null)}
+                style={{ flex: 1, borderRadius: '8px' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-primary"
+                onClick={confirmDeleteRoom}
+                disabled={deleting}
+                style={{ flex: 1, background: 'linear-gradient(135deg, #ef4444, #dc2626)', borderRadius: '8px' }}
+              >
+                {deleting ? 'Deleting...' : 'Delete Room'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Leave Room Modal */}
+      {leavingRoomTarget && (
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+          <div className="glass-card modal-box" style={{ width: '380px', padding: '24px', borderRadius: '16px', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700, fontSize: '1.125rem', color: '#f59e0b', marginBottom: '12px' }}>
+              <LogOut size={22} /> Confirm Leaving Room
+            </div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+              Are you sure you want to leave room <strong>"{leavingRoomTarget.name}"</strong>? It will be removed from your active room list.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                className="btn-outline"
+                onClick={() => setLeavingRoomTarget(null)}
+                style={{ flex: 1, borderRadius: '8px' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-primary"
+                onClick={confirmLeaveRoom}
+                disabled={leaving}
+                style={{ flex: 1, background: 'linear-gradient(135deg, #f59e0b, #d97706)', borderRadius: '8px' }}
+              >
+                {leaving ? 'Leaving...' : 'Leave Room'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Join Call Nickname Modal */}
       {joiningRoom && (
-        <div className="modal-backdrop">
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
           <div className="glass-card modal-box" style={{ width: '360px', padding: '24px', borderRadius: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Join {joiningRoom.name}</span>
@@ -495,6 +579,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
                   maxLength={50}
                   required
                   style={{ borderRadius: '8px' }}
+                  autoFocus
                 />
               </div>
               <button type="submit" className="btn-primary" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', borderRadius: '8px' }}>
