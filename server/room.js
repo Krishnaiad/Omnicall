@@ -72,7 +72,7 @@ router.post('/:roomId/invite', (req, res) => {
   res.json({ ok: true, member: { id: invitee.id, email: invitee.email, name: invitee.name } });
 });
 
-// Issue a LiveKit access token — with optional custom in-room display name/alias
+// Issue a LiveKit access token — with unique identity + custom display name
 router.post('/:roomId/token', async (req, res) => {
   const { roomId } = req.params;
   const { displayName } = req.body || {};
@@ -88,10 +88,13 @@ router.post('/:roomId/token', async (req, res) => {
   }
 
   const effectiveName = (displayName && displayName.trim()) ? displayName.trim().slice(0, 50) : req.user.name;
+  // Ensure participant identity is unique per user to prevent collision errors
+  const uniqueIdentity = `${req.user.id}_${effectiveName}`;
 
   try {
     const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
-      identity: effectiveName,
+      identity: uniqueIdentity,
+      name: effectiveName,
       ttl: '30m',
     });
     at.addGrant({ roomJoin: true, room: roomId, canPublish: true, canSubscribe: true });

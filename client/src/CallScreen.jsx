@@ -26,6 +26,9 @@ function TrackTile({ item, activeFilter, activeBg }) {
 
   const filterObj = item.isLocal ? VIDEO_FILTERS.find((f) => f.id === activeFilter) : null;
   const bgObj = item.isLocal ? VIRTUAL_BACKGROUNDS.find((b) => b.id === activeBg) : null;
+  
+  // Clean display label parsing
+  const displayLabel = item.name || (item.identity.includes('_') ? item.identity.split('_').slice(1).join('_') : item.identity);
 
   return (
     <div className="video-tile" style={bgObj ? bgObj.style : {}}>
@@ -37,7 +40,7 @@ function TrackTile({ item, activeFilter, activeBg }) {
         style={{ filter: filterObj ? filterObj.css : 'none' }}
       />
       <div className="tile-overlay">
-        <span>{item.identity}</span>
+        <span>{displayLabel}</span>
         {item.isLocal && <span style={{ opacity: 0.7 }}>(you)</span>}
       </div>
     </div>
@@ -80,10 +83,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
   const isOwner = roomData.owner_id === user.id;
 
-  const addTrack = useCallback((sid, kind, identity, isLocal, track) => {
+  const addTrack = useCallback((sid, kind, identity, name, isLocal, track) => {
     setTracks((prev) => {
       if (prev.some((t) => t.sid === sid)) return prev;
-      return [...prev, { sid, kind, identity, isLocal, track }];
+      return [...prev, { sid, kind, identity, name, isLocal, track }];
     });
   }, []);
 
@@ -141,7 +144,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     roomRef.current = room;
 
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-      addTrack(publication.trackSid, track.kind, participant.identity, false, track);
+      addTrack(publication.trackSid, track.kind, participant.identity, participant.name, false, track);
     });
 
     room.on(RoomEvent.TrackUnsubscribed, (_track, publication) => {
@@ -150,7 +153,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
     room.on(RoomEvent.LocalTrackPublished, (publication, participant) => {
       if (publication.track) {
-        addTrack(publication.trackSid, publication.track.kind, participant.identity, true, publication.track);
+        addTrack(publication.trackSid, publication.track.kind, participant.identity, participant.name || displayName, true, publication.track);
       }
     });
 
@@ -179,7 +182,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     return () => {
       room.disconnect();
     };
-  }, [roomToken, addTrack, removeTrack, onLeave]);
+  }, [roomToken, addTrack, removeTrack, onLeave, displayName]);
 
   const toggleMic = async () => {
     if (!roomRef.current) return;
@@ -202,7 +205,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     setDisplayName(updated);
     
     setTracks((prev) =>
-      prev.map((t) => (t.isLocal ? { ...t, identity: updated } : t))
+      prev.map((t) => (t.isLocal ? { ...t, name: updated } : t))
     );
     setShowRenameModal(false);
   };
@@ -260,7 +263,6 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     if (isOwner || isScreenShareApproved) {
       startNativeScreenShare();
     } else {
-      // Request permission from room owner
       if (socketRef.current) {
         socketRef.current.emit('request-screen-share-permission', {
           roomId: roomData.id,
@@ -293,7 +295,6 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
       setIsSharingScreen(true);
 
-      // Broadcast presentation stage notice
       if (socketRef.current) {
         socketRef.current.emit('share-presentation-media', {
           roomId: roomData.id,
