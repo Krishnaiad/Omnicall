@@ -5,6 +5,7 @@ import { db, randomUUID } from './db.js';
 
 const router = Router();
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@omnicall.com').toLowerCase().trim();
 
 function getSecret() {
   const secret = process.env.JWT_SECRET;
@@ -14,7 +15,7 @@ function getSecret() {
 
 export function signToken(user) {
   return jwt.sign(
-    { sub: user.id, email: user.email, name: user.name },
+    { sub: user.id, email: user.email, name: user.name, role: user.role || 'user' },
     getSecret(),
     { expiresIn: '7d' }
   );
@@ -42,16 +43,20 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
+    // Role Assignment: Only ADMIN_EMAIL gets 'admin' role. All other registrations are strictly 'user'.
+    const assignedRole = normalizedEmail === ADMIN_EMAIL ? 'admin' : 'user';
+
     const passwordHash = await bcrypt.hash(password, 12);
     const id = randomUUID();
-    db.prepare('INSERT INTO users (id, email, password_hash, name) VALUES (?, ?, ?, ?)').run(
+    db.prepare('INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)').run(
       id,
       normalizedEmail,
       passwordHash,
-      name.trim()
+      name.trim(),
+      assignedRole
     );
 
-    const user = { id, email: normalizedEmail, name: name.trim() };
+    const user = { id, email: normalizedEmail, name: name.trim(), role: assignedRole };
     res.status(201).json({ token: signToken(user), user });
   } catch (err) {
     console.error('Register failed:', err);
@@ -74,7 +79,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const user = { id: row.id, email: row.email, name: row.name };
+    const user = { id: row.id, email: row.email, name: row.name, role: row.role || 'user' };
     res.json({ token: signToken(user), user });
   } catch (err) {
     console.error('Login failed:', err);
@@ -91,11 +96,24 @@ export function requireAuth(req, res, next) {
 
   try {
     const payload = jwt.verify(token, getSecret());
-    req.user = { id: payload.sub, email: payload.email, name: payload.name };
+    req.user = { id: payload.sub, email: payload.email, name: payload.name, role: payload.role || 'user' };
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
+
+export function requireAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied: Admin privileges required' });
+  }
+  next();
+}
+
+// Protected Admin Directory Endpoint
+router.get('/users', requireAuth, requireAdmin, (req, res) => {
+  const users = db.prepare('SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC').all();
+  res.json({ users });
+});
 
 export default router;

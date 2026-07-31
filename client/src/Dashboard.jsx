@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
-import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, CheckCircle2, Clock, UserCheck, X, Image as ImageIcon, Music } from 'lucide-react';
+import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, UserCheck, X, Image as ImageIcon, Music, Users, Shield } from 'lucide-react';
 
 export default function Dashboard({ token, user, onLogout, onJoinCall }) {
   const [rooms, setRooms] = useState([]);
@@ -13,9 +13,16 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
   const [loadingRooms, setLoadingRooms] = useState(true);
   const [uploading, setUploading] = useState(false);
 
+  // Admin User Directory Modal State
+  const [showAdminDirectory, setShowAdminDirectory] = useState(false);
+  const [adminUsersList, setAdminUsersList] = useState([]);
+  const [loadingAdminUsers, setLoadingAdminUsers] = useState(false);
+
   // Join Call Nickname Modal State
   const [joiningRoom, setJoiningRoom] = useState(null);
   const [customNickname, setCustomNickname] = useState('');
+
+  const isAdmin = user && user.role === 'admin';
 
   const fetchRooms = async () => {
     try {
@@ -37,10 +44,28 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
     }
   };
 
+  const fetchAdminUsers = async () => {
+    if (!isAdmin) return;
+    setLoadingAdminUsers(true);
+    try {
+      const data = await api.listUsers(token);
+      setAdminUsersList(data.users || []);
+    } catch (err) {
+      setError(`Admin Error: ${err.message}`);
+    } finally {
+      setLoadingAdminUsers(false);
+    }
+  };
+
   useEffect(() => {
     fetchRooms();
     fetchClips();
   }, [token]);
+
+  const handleOpenAdminDirectory = () => {
+    setShowAdminDirectory(true);
+    fetchAdminUsers();
+  };
 
   const handleCreateRoom = async (e) => {
     e.preventDefault();
@@ -126,8 +151,22 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Video size={28} color="#818cf8" />
           <span className="brand-title">OmniCall Workspace</span>
+          {isAdmin && (
+            <span style={{ fontSize: '0.75rem', background: 'rgba(236, 72, 153, 0.2)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.4)', padding: '2px 8px', borderRadius: '9999px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Shield size={12} /> Admin Mode
+            </span>
+          )}
         </div>
         <div className="user-badge">
+          {isAdmin && (
+            <button
+              className="btn-outline"
+              onClick={handleOpenAdminDirectory}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'rgba(236, 72, 153, 0.4)', color: '#f472b6' }}
+            >
+              <Users size={16} /> User Directory
+            </button>
+          )}
           <span className="user-info">Signed in as <strong>{user.name}</strong></span>
           <button className="btn-outline" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <LogOut size={16} /> Logout
@@ -253,6 +292,57 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
           )}
         </div>
       </div>
+
+      {/* Admin User Directory Modal */}
+      {showAdminDirectory && (
+        <div className="modal-backdrop">
+          <div className="glass-card modal-box" style={{ maxWidth: '640px', width: '95%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ fontWeight: 600, fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#ec4899' }}>
+                <Users size={22} color="#ec4899" /> Registered User Accounts (Admin Only)
+              </div>
+              <button onClick={() => setShowAdminDirectory(false)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {loadingAdminUsers ? (
+              <p style={{ color: 'var(--text-muted)' }}>Loading user directory...</p>
+            ) : adminUsersList.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)' }}>No accounts registered yet.</p>
+            ) : (
+              <div style={{ maxHeight: '340px', overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: 'var(--text-muted)' }}>
+                      <th style={{ padding: '10px' }}>Name</th>
+                      <th style={{ padding: '10px' }}>Email</th>
+                      <th style={{ padding: '10px' }}>Role</th>
+                      <th style={{ padding: '10px' }}>Registered At</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminUsersList.map((u) => (
+                      <tr key={u.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                        <td style={{ padding: '10px', fontWeight: 600 }}>{u.name}</td>
+                        <td style={{ padding: '10px', color: '#a5b4fc' }}>{u.email}</td>
+                        <td style={{ padding: '10px' }}>
+                          <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '9999px', fontWeight: 600, background: u.role === 'admin' ? 'rgba(236, 72, 153, 0.2)' : 'rgba(99, 102, 241, 0.2)', color: u.role === 'admin' ? '#f472b6' : '#a5b4fc' }}>
+                            {u.role}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                          {new Date(u.created_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Join Room Nickname Choice Modal */}
       {joiningRoom && (
