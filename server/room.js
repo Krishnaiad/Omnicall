@@ -6,15 +6,15 @@ import { requireAuth } from './auth.js';
 const router = Router();
 router.use(requireAuth);
 
-const VERIFIED_LIVEKIT_KEY = 'APIuDM3eSdCaGwg';
-const VERIFIED_LIVEKIT_SECRET = 'VeFBySdnkeXXUT1Ideezc0T32mzfoUe5Z3bmMwIc3fea';
-const VERIFIED_LIVEKIT_URL = 'wss://omnicall-gfhd6nn2.livekit.cloud';
-
 function getLiveKitCredentials() {
-  const apiKey = VERIFIED_LIVEKIT_KEY;
-  const apiSecret = VERIFIED_LIVEKIT_SECRET;
-  const rawUrl = VERIFIED_LIVEKIT_URL;
-  const httpUrl = 'https://omnicall-gfhd6nn2.livekit.cloud';
+  const apiKey = (process.env.LIVEKIT_API_KEY || '').trim();
+  const apiSecret = (process.env.LIVEKIT_API_SECRET || '').trim();
+  let rawUrl = (process.env.LIVEKIT_URL || '').trim();
+
+  if (rawUrl && !rawUrl.startsWith('wss://') && !rawUrl.startsWith('ws://')) {
+    rawUrl = `wss://${rawUrl.replace(/^https?:\/\//, '')}`;
+  }
+  const httpUrl = rawUrl.replace('wss://', 'https://').replace('ws://', 'http://');
   return { apiKey, apiSecret, rawUrl, httpUrl };
 }
 
@@ -26,6 +26,10 @@ async function isMember(roomId, userId) {
 // LiveKit Diagnostic Endpoint to verify credentials against LiveKit Cloud
 router.get('/debug-livekit', async (req, res) => {
   const { apiKey, apiSecret, httpUrl } = getLiveKitCredentials();
+
+  if (!apiKey || !apiSecret || !httpUrl) {
+    return res.status(500).json({ ok: false, error: 'Server missing LIVEKIT_API_KEY, LIVEKIT_API_SECRET, or LIVEKIT_URL in environment' });
+  }
 
   try {
     const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
@@ -119,11 +123,16 @@ router.post('/:roomId/invite', async (req, res) => {
   }
 });
 
-// Issue a LiveKit access token — with unique identity & guaranteed verified credentials
+// Issue a LiveKit access token — loaded strictly from environment variables
 router.post('/:roomId/token', async (req, res) => {
   const { roomId } = req.params;
   const { displayName } = req.body || {};
   const { apiKey, apiSecret } = getLiveKitCredentials();
+
+  if (!apiKey || !apiSecret) {
+    console.error('Server missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET in environment!');
+    return res.status(500).json({ error: 'Server is missing LiveKit credentials. Please configure LIVEKIT_API_KEY and LIVEKIT_API_SECRET in Render environment.' });
+  }
 
   try {
     const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
