@@ -6,30 +6,15 @@ import { requireAuth } from './auth.js';
 const router = Router();
 router.use(requireAuth);
 
-const ACTIVE_LIVEKIT_KEY = 'APIWwmZh2HhPX7v';
-const ACTIVE_LIVEKIT_SECRET = 'XiZynYs8Sh2ccQK9RNaIAl9DYb1HbjU8baw980oqnjD';
-const ACTIVE_LIVEKIT_URL = 'wss://omnicall-gfhd6nn2.livekit.cloud';
-
 function getLiveKitCredentials() {
-  let apiKey = (process.env.LIVEKIT_API_KEY || '').trim();
-  let apiSecret = (process.env.LIVEKIT_API_SECRET || '').trim();
+  const apiKey = (process.env.LIVEKIT_API_KEY || '').trim();
+  const apiSecret = (process.env.LIVEKIT_API_SECRET || '').trim();
   let rawUrl = (process.env.LIVEKIT_URL || '').trim();
 
-  // Explicitly override revoked old key APIuDM3eSdCaGwg with new active key APIWwmZh2HhPX7v
-  if (!apiKey || apiKey === 'APIuDM3eSdCaGwg' || apiKey.includes('xxxx')) {
-    apiKey = ACTIVE_LIVEKIT_KEY;
-  }
-  if (!apiSecret || apiSecret.startsWith('VeFBySdn') || apiSecret.includes('xxxx')) {
-    apiSecret = ACTIVE_LIVEKIT_SECRET;
-  }
-  if (!rawUrl || rawUrl.includes('xxxx') || !rawUrl.includes('omnicall-gfhd6nn2')) {
-    rawUrl = ACTIVE_LIVEKIT_URL;
-  }
-
-  if (!rawUrl.startsWith('wss://') && !rawUrl.startsWith('ws://')) {
+  if (rawUrl && !rawUrl.startsWith('wss://') && !rawUrl.startsWith('ws://')) {
     rawUrl = `wss://${rawUrl.replace(/^https?:\/\//, '')}`;
   }
-  const httpUrl = rawUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+  const httpUrl = rawUrl ? rawUrl.replace('wss://', 'https://').replace('ws://', 'http://') : '';
   return { apiKey, apiSecret, rawUrl, httpUrl };
 }
 
@@ -41,6 +26,10 @@ async function isMember(roomId, userId) {
 // LiveKit Diagnostic Endpoint to verify credentials against LiveKit Cloud
 router.get('/debug-livekit', async (req, res) => {
   const { apiKey, apiSecret, httpUrl } = getLiveKitCredentials();
+
+  if (!apiKey || !apiSecret || !httpUrl) {
+    return res.status(500).json({ ok: false, error: 'Server missing LIVEKIT_API_KEY, LIVEKIT_API_SECRET, or LIVEKIT_URL in environment' });
+  }
 
   try {
     const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
@@ -134,15 +123,15 @@ router.post('/:roomId/invite', async (req, res) => {
   }
 });
 
-// Issue a LiveKit access token — with unique identity & active credentials
+// Issue a LiveKit access token — loaded strictly from environment variables
 router.post('/:roomId/token', async (req, res) => {
   const { roomId } = req.params;
   const { displayName } = req.body || {};
   const { apiKey, apiSecret } = getLiveKitCredentials();
 
   if (!apiKey || !apiSecret) {
-    console.error('Server missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET!');
-    return res.status(500).json({ error: 'Server is missing LiveKit credentials.' });
+    console.error('Server missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET in environment!');
+    return res.status(500).json({ error: 'Server is missing LiveKit credentials. Please configure LIVEKIT_API_KEY and LIVEKIT_API_SECRET in Render environment.' });
   }
 
   try {
