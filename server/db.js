@@ -47,7 +47,6 @@ export const db = {
     return {
       run: (...args) => {
         if (isPg) {
-          // Convert ? parameters to $1, $2 for PostgreSQL
           let count = 0;
           const pgSql = sql.replace(/\?/g, () => `$${++count}`);
           return pool.query(pgSql, args);
@@ -75,7 +74,6 @@ export const db = {
       },
     };
   },
-  // Synchronous helpers for local SQLite & Async for Pg
   queryGet: (sql, args = []) => {
     if (isPg) {
       let count = 0;
@@ -130,6 +128,15 @@ async function initTables() {
       role TEXT DEFAULT 'member',
       joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (room_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL,
+      sender_id TEXT NOT NULL,
+      sender_name TEXT NOT NULL,
+      message TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS media_files (

@@ -81,7 +81,6 @@ router.post('/', async (req, res) => {
   const trimmedName = name.trim();
 
   try {
-    // Check unique room name for this creator
     const existing = await db.queryGet(
       'SELECT 1 FROM rooms WHERE owner_id = ? AND LOWER(name) = LOWER(?)',
       [req.user.id, trimmedName]
@@ -159,7 +158,7 @@ router.post('/:roomId/invite', async (req, res) => {
   }
 });
 
-// Delete Room (Owner Only)
+// Bulletproof Delete Room (Owner Only)
 router.delete('/:roomId', async (req, res) => {
   const { roomId } = req.params;
 
@@ -170,18 +169,18 @@ router.delete('/:roomId', async (req, res) => {
       return res.status(403).json({ error: 'Only the room owner can delete this room' });
     }
 
-    await db.queryRun('DELETE FROM chat_messages WHERE room_id = ?', [roomId]);
-    await db.queryRun('DELETE FROM room_members WHERE room_id = ?', [roomId]);
+    try { await db.queryRun('DELETE FROM chat_messages WHERE room_id = ?', [roomId]); } catch (_) {}
+    try { await db.queryRun('DELETE FROM room_members WHERE room_id = ?', [roomId]); } catch (_) {}
     await db.queryRun('DELETE FROM rooms WHERE id = ?', [roomId]);
 
     res.json({ ok: true, message: 'Room deleted successfully' });
   } catch (err) {
     console.error('Delete room failed:', err);
-    res.status(500).json({ error: 'Failed to delete room' });
+    res.status(500).json({ error: 'Failed to delete room: ' + err.message });
   }
 });
 
-// Leave Room (Member Only)
+// Bulletproof Leave Room (Member Only)
 router.delete('/:roomId/leave', async (req, res) => {
   const { roomId } = req.params;
 
@@ -196,7 +195,7 @@ router.delete('/:roomId/leave', async (req, res) => {
     res.json({ ok: true, message: 'Left room successfully' });
   } catch (err) {
     console.error('Leave room failed:', err);
-    res.status(500).json({ error: 'Failed to leave room' });
+    res.status(500).json({ error: 'Failed to leave room: ' + err.message });
   }
 });
 
