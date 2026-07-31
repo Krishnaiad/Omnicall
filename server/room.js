@@ -15,9 +15,16 @@ function getLiveKitCredentials() {
   let apiSecret = (process.env.LIVEKIT_API_SECRET || '').trim();
   let rawUrl = (process.env.LIVEKIT_URL || '').trim();
 
-  if (!apiKey || apiKey.length < 5 || apiKey.includes('xxxx')) apiKey = ACTIVE_LIVEKIT_KEY;
-  if (!apiSecret || apiSecret.length < 20 || apiSecret.includes('xxxx')) apiSecret = ACTIVE_LIVEKIT_SECRET;
-  if (!rawUrl || rawUrl.includes('xxxx') || !rawUrl.includes('omnicall-gfhd6nn2')) rawUrl = ACTIVE_LIVEKIT_URL;
+  // Explicitly override revoked old key APIuDM3eSdCaGwg with new active key APIWwmZh2HhPX7v
+  if (!apiKey || apiKey === 'APIuDM3eSdCaGwg' || apiKey.includes('xxxx')) {
+    apiKey = ACTIVE_LIVEKIT_KEY;
+  }
+  if (!apiSecret || apiSecret.startsWith('VeFBySdn') || apiSecret.includes('xxxx')) {
+    apiSecret = ACTIVE_LIVEKIT_SECRET;
+  }
+  if (!rawUrl || rawUrl.includes('xxxx') || !rawUrl.includes('omnicall-gfhd6nn2')) {
+    rawUrl = ACTIVE_LIVEKIT_URL;
+  }
 
   if (!rawUrl.startsWith('wss://') && !rawUrl.startsWith('ws://')) {
     rawUrl = `wss://${rawUrl.replace(/^https?:\/\//, '')}`;
