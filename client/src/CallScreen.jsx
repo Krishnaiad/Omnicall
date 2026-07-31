@@ -27,7 +27,6 @@ function TrackTile({ item, activeFilter, activeBg }) {
   const filterObj = item.isLocal ? VIDEO_FILTERS.find((f) => f.id === activeFilter) : null;
   const bgObj = item.isLocal ? VIRTUAL_BACKGROUNDS.find((b) => b.id === activeBg) : null;
   
-  // Clean display label parsing
   const displayLabel = item.name || (item.identity.includes('_') ? item.identity.split('_').slice(1).join('_') : item.identity);
 
   return (
@@ -137,10 +136,12 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     };
   }, [token, roomData.id, isOwner, user.id]);
 
-  // LiveKit connection with robust URL scheme fallback
+  // LiveKit connection with URL fallback and sanitization
   useEffect(() => {
-    let rawUrl = import.meta.env.VITE_LIVEKIT_URL || 'wss://omnicall-gfhd6nn2.livekit.cloud';
-    rawUrl = rawUrl.trim();
+    let rawUrl = (import.meta.env.VITE_LIVEKIT_URL || 'wss://omnicall-gfhd6nn2.livekit.cloud').trim();
+    if (!rawUrl || rawUrl.includes('xxxx') || !rawUrl.includes('omnicall-gfhd6nn2')) {
+      rawUrl = 'wss://omnicall-gfhd6nn2.livekit.cloud';
+    }
     if (!rawUrl.startsWith('wss://') && !rawUrl.startsWith('ws://')) {
       rawUrl = `wss://${rawUrl.replace(/^https?:\/\//, '')}`;
     }
