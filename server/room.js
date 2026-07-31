@@ -11,9 +11,13 @@ const ACTIVE_LIVEKIT_SECRET = 'XiZynYs8Sh2ccQK9RNaIAl9DYb1HbjU8baw980oqnjD';
 const ACTIVE_LIVEKIT_URL = 'wss://omnicall-gfhd6nn2.livekit.cloud';
 
 function getLiveKitCredentials() {
-  const apiKey = (process.env.LIVEKIT_API_KEY || ACTIVE_LIVEKIT_KEY).trim();
-  const apiSecret = (process.env.LIVEKIT_API_SECRET || ACTIVE_LIVEKIT_SECRET).trim();
-  let rawUrl = (process.env.LIVEKIT_URL || ACTIVE_LIVEKIT_URL).trim();
+  let apiKey = (process.env.LIVEKIT_API_KEY || '').trim();
+  let apiSecret = (process.env.LIVEKIT_API_SECRET || '').trim();
+  let rawUrl = (process.env.LIVEKIT_URL || '').trim();
+
+  if (!apiKey || apiKey.length < 5) apiKey = ACTIVE_LIVEKIT_KEY;
+  if (!apiSecret || apiSecret.length < 20) apiSecret = ACTIVE_LIVEKIT_SECRET;
+  if (!rawUrl || !rawUrl.includes('livekit.cloud')) rawUrl = ACTIVE_LIVEKIT_URL;
 
   if (!rawUrl.startsWith('wss://') && !rawUrl.startsWith('ws://')) {
     rawUrl = `wss://${rawUrl.replace(/^https?:\/\//, '')}`;
