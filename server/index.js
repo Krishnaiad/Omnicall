@@ -1,7 +1,5 @@
 import express from 'express';
 import { createServer } from 'http';
-import { Server as SocketIOServer } from 'socket.io-client'; // type check
-import { Server } from 'http';
 import { Server as ServerIO } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
