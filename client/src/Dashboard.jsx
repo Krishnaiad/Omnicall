@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
-import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, CheckCircle2, Clock, UserCheck, X } from 'lucide-react';
+import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, CheckCircle2, Clock, UserCheck, X, Image as ImageIcon, Music } from 'lucide-react';
 
 export default function Dashboard({ token, user, onLogout, onJoinCall }) {
   const [rooms, setRooms] = useState([]);
@@ -84,7 +84,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
     try {
       await api.uploadClip(token, formData);
       setSelectedFile(null);
-      setSuccess('Media clip uploaded and queued for processing!');
+      setSuccess('Media file uploaded successfully!');
       fetchClips();
     } catch (err) {
       setError(err.message);
@@ -112,6 +112,12 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
     if (!joiningRoom) return;
     onJoinCall(joiningRoom, customNickname.trim() || user.name);
     setJoiningRoom(null);
+  };
+
+  const getMediaIcon = (mimeType) => {
+    if (mimeType.startsWith('image/')) return <ImageIcon size={18} color="#ec4899" />;
+    if (mimeType.startsWith('audio/')) return <Music size={18} color="#10b981" />;
+    return <Film size={18} color="#818cf8" />;
   };
 
   return (
@@ -201,7 +207,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
           )}
         </div>
 
-        {/* Media Library Section */}
+        {/* Server Media Library Section */}
         <div className="glass-card section-box">
           <div className="section-title">
             <Film size={20} color="#ec4899" />
@@ -209,13 +215,13 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
           </div>
 
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-            Pre-upload video/audio clips here to stream securely during calls. Clips are validated & transcoded on the server.
+            Upload Images (PNG, JPG, WEBP), Videos (MP4), or Audio (MP3) here. Stream in-call into your tile or broadcast to the Presentation Stage!
           </p>
 
           <form onSubmit={handleUploadClip} style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
             <input
               type="file"
-              accept="video/mp4,video/webm,audio/mp3,audio/wav"
+              accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mp3,audio/wav"
               className="form-control"
               style={{ fontSize: '0.8125rem', padding: '6px' }}
               onChange={(e) => setSelectedFile(e.target.files[0])}
@@ -226,13 +232,13 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
           </form>
 
           {clips.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No clips uploaded yet.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No media uploaded yet.</p>
           ) : (
             <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
               {clips.map((clip) => (
                 <div key={clip.id} className="room-item" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    {clip.status === 'ready' ? <CheckCircle2 size={18} color="#10b981" /> : <Clock size={18} color="#f59e0b" />}
+                    {getMediaIcon(clip.mimeType)}
                     <div>
                       <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>{clip.name}</div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{clip.mimeType} • {clip.status}</div>

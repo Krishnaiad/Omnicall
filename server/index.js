@@ -49,7 +49,7 @@ app.use('/api/media', mediaRouter);
 
 app.get('/healthz', (_req, res) => res.json({ ok: true, timestamp: new Date().toISOString() }));
 
-// Socket.io Real-time Chat & Notifications setup
+// Socket.io Real-time Chat & Presentation Stage setup
 const io = new SocketIOServer(server, {
   cors: {
     origin: CLIENT_ORIGIN,
@@ -119,6 +119,20 @@ io.on('connection', (socket) => {
       takenBy: name,
       timestamp: new Date().toISOString(),
     });
+  });
+
+  // Shared Presentation Screen Broadcast (Option B)
+  socket.on('share-presentation-media', ({ roomId, mediaUrl, mediaName, mediaType, presenterName }) => {
+    io.to(roomId).emit('presentation-media-changed', {
+      mediaUrl,
+      mediaName,
+      mediaType,
+      presenterName: presenterName || socket.user.name,
+    });
+  });
+
+  socket.on('stop-presentation-media', ({ roomId }) => {
+    io.to(roomId).emit('presentation-media-changed', null);
   });
 });
 

@@ -24,14 +24,24 @@ const storage = multer.diskStorage({
 });
 
 const ALLOWED_MIME_TYPES = [
+  // Video
   'video/mp4',
   'video/webm',
   'video/ogg',
+  'video/quicktime',
+  'video/x-msvideo',
+  // Audio
   'audio/mpeg',
   'audio/mp3',
   'audio/wav',
   'audio/ogg',
   'audio/webm',
+  'audio/x-m4a',
+  // Image / Pictures
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
 ];
 
 const upload = multer({
@@ -41,26 +51,36 @@ const upload = multer({
     if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only video (MP4, WebM) and audio (MP3, WAV, WebM) are allowed.'));
+      cb(new Error('Invalid file format. Supported formats: MP4, WebM, MP3, WAV, PNG, JPG, WEBP, GIF.'));
     }
   },
 });
 
-// Process upload via FFmpeg (or direct pass-through if FFmpeg binary is absent)
-function transcodeMedia(fileId, inputPath, outputPath, isAudio) {
+// Process upload via FFmpeg (or direct copy for images/audio)
+function transcodeMedia(fileId, inputPath, outputPath, isImage, isAudio) {
   return new Promise((resolve) => {
+    if (isImage) {
+      // Direct pass-through for images
+      try {
+        fs.copyFileSync(inputPath, outputPath);
+        fs.unlinkSync(inputPath);
+      } catch (err) {
+        console.error('Image file copy error:', err);
+      }
+      return resolve({ success: true, path: outputPath });
+    }
+
     ffmpeg(inputPath)
       .output(outputPath)
       .videoCodec(isAudio ? 'none' : 'libx264')
       .audioCodec('aac')
-      .format(isAudio ? 'mp4' : 'mp4')
+      .format('mp4')
       .on('end', () => {
         try { fs.unlinkSync(inputPath); } catch {}
         resolve({ success: true, path: outputPath });
       })
       .on('error', (err) => {
         console.warn(`FFmpeg transcoding notice for ${fileId}:`, err.message);
-        // Fallback: move original file to processed if ffmpeg binary missing or fails
         try {
           fs.copyFileSync(inputPath, outputPath);
           fs.unlinkSync(inputPath);
@@ -73,34 +93,34 @@ function transcodeMedia(fileId, inputPath, outputPath, isAudio) {
   });
 }
 
-// Upload endpoint
+// Upload endpoint for Images, Video, and Audio
 router.post('/upload', (req, res) => {
   upload.single('clip')(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ error: err.message || 'File upload failed' });
     }
     if (!req.file) {
-      return res.status(400).json({ error: 'No media clip file provided' });
+      return res.status(400).json({ error: 'No media file provided' });
     }
 
     const fileId = randomUUID();
+    const isImage = req.file.mimetype.startsWith('image/');
     const isAudio = req.file.mimetype.startsWith('audio/');
-    const processedFilename = `${fileId}.mp4`;
+    const ext = path.extname(req.file.originalname) || (isImage ? '.png' : '.mp4');
+    const processedFilename = `${fileId}${ext}`;
     const outputPath = path.join(processedDir, processedFilename);
 
-    // Save metadata record initial status
     db.prepare(
       `INSERT INTO media_files (id, user_id, original_name, mime_type, file_path, status)
        VALUES (?, ?, ?, ?, ?, ?)`
     ).run(fileId, req.user.id, req.file.originalname, req.file.mimetype, outputPath, 'processing');
 
-    // Asynchronous background transcoding pass
-    transcodeMedia(fileId, req.file.path, outputPath, isAudio).then(() => {
+    transcodeMedia(fileId, req.file.path, outputPath, isImage, isAudio).then(() => {
       db.prepare(`UPDATE media_files SET status = 'ready' WHERE id = ?`).run(fileId);
     });
 
     res.status(202).json({
-      message: 'Media clip received and processing started',
+      message: 'Media uploaded successfully',
       media: {
         id: fileId,
         name: req.file.originalname,
@@ -111,7 +131,7 @@ router.post('/upload', (req, res) => {
   });
 });
 
-// List user's clips
+// List user's clips (Images, Videos, Audios)
 router.get('/list', (req, res) => {
   const clips = db
     .prepare(
@@ -125,14 +145,14 @@ router.get('/list', (req, res) => {
   res.json({ clips });
 });
 
-// Stream authenticated media clip
+// Stream authenticated media clip (Images, Video, Audio)
 router.get('/stream/:id', (req, res) => {
   const { id } = req.params;
   const clip = db.prepare('SELECT * FROM media_files WHERE id = ?').get(id);
 
-  if (!clip) return res.status(404).json({ error: 'Media clip not found' });
+  if (!clip) return res.status(404).json({ error: 'Media file not found' });
   if (clip.user_id !== req.user.id) {
-    return res.status(403).json({ error: 'Access denied to this media clip' });
+    return res.status(403).json({ error: 'Access denied' });
   }
   if (!fs.existsSync(clip.file_path)) {
     return res.status(404).json({ error: 'Media file does not exist on disk' });
@@ -140,8 +160,18 @@ router.get('/stream/:id', (req, res) => {
 
   const stat = fs.statSync(clip.file_path);
   const fileSize = stat.size;
-  const range = req.headers.range;
+  const mimeType = clip.mime_type || 'application/octet-stream';
 
+  if (mimeType.startsWith('image/')) {
+    res.writeHead(200, {
+      'Content-Length': fileSize,
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=3600',
+    });
+    return fs.createReadStream(clip.file_path).pipe(res);
+  }
+
+  const range = req.headers.range;
   if (range) {
     const parts = range.replace(/bytes=/, '').split('-');
     const start = parseInt(parts[0], 10);
@@ -152,14 +182,14 @@ router.get('/stream/:id', (req, res) => {
       'Content-Range': `bytes ${start}-${end}/${fileSize}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': chunksize,
-      'Content-Type': 'video/mp4',
+      'Content-Type': mimeType.startsWith('audio/') ? mimeType : 'video/mp4',
     };
     res.writeHead(206, head);
     file.pipe(res);
   } else {
     const head = {
       'Content-Length': fileSize,
-      'Content-Type': 'video/mp4',
+      'Content-Type': mimeType.startsWith('audio/') ? mimeType : 'video/mp4',
     };
     res.writeHead(200, head);
     fs.createReadStream(clip.file_path).pipe(res);
@@ -171,7 +201,7 @@ router.delete('/:id', (req, res) => {
   const { id } = req.params;
   const clip = db.prepare('SELECT * FROM media_files WHERE id = ?').get(id);
 
-  if (!clip) return res.status(404).json({ error: 'Media clip not found' });
+  if (!clip) return res.status(404).json({ error: 'Media file not found' });
   if (clip.user_id !== req.user.id) {
     return res.status(403).json({ error: 'Access denied' });
   }
@@ -179,7 +209,7 @@ router.delete('/:id', (req, res) => {
   try {
     if (fs.existsSync(clip.file_path)) fs.unlinkSync(clip.file_path);
   } catch (err) {
-    console.warn('Failed to delete physical media file:', err);
+    console.warn('Failed to delete physical file:', err);
   }
 
   db.prepare('DELETE FROM media_files WHERE id = ?').run(id);

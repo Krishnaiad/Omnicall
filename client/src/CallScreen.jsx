@@ -5,6 +5,7 @@ import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOf
 import MediaInjector from './MediaInjector.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import EffectsPicker, { VIDEO_FILTERS, VIRTUAL_BACKGROUNDS } from './EffectsPicker.jsx';
+import PresentationStage from './PresentationStage.jsx';
 import { captureRoomSnapshot } from './snapshotUtils.js';
 
 function TrackTile({ item, activeFilter, activeBg }) {
@@ -49,6 +50,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   const [camOn, setCamOn] = useState(true);
   const [displayName, setDisplayName] = useState(initialDisplayName || user.name);
 
+  // Shared Presentation Stage state
+  const [sharedMedia, setSharedMedia] = useState(null);
+
   // Modals & Panels
   const [showInjector, setShowInjector] = useState(false);
   const [showEffects, setShowEffects] = useState(false);
@@ -80,7 +84,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     setTracks((prev) => prev.filter((t) => t.sid !== sid));
   }, []);
 
-  // Socket.io connection for snapshot notifications
+  // Socket.io connection for snapshot & presentation broadcasts
   useEffect(() => {
     const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
     const socket = io(serverUrl, { auth: { token } });
@@ -93,6 +97,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     socket.on('snapshot-notification', (data) => {
       setSnapshotToast(`📸 Room Memory Snapshot captured by ${data.takenBy}!`);
       setTimeout(() => setSnapshotToast(null), 4500);
+    });
+
+    socket.on('presentation-media-changed', (mediaData) => {
+      setSharedMedia(mediaData);
     });
 
     return () => {
@@ -179,10 +187,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       return;
     }
 
-    // Capture PNG locally for creator
     captureRoomSnapshot(roomData.name);
 
-    // Emit Socket notification to room participants
     if (socketRef.current) {
       socketRef.current.emit('snapshot-taken', {
         roomId: roomData.id,
@@ -191,8 +197,30 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     }
   };
 
+  const handleSharePresentation = (mediaUrl, mediaName, mediaType) => {
+    if (socketRef.current) {
+      socketRef.current.emit('share-presentation-media', {
+        roomId: roomData.id,
+        mediaUrl,
+        mediaName,
+        mediaType,
+        presenterName: displayName,
+      });
+    }
+    setShowInjector(false);
+  };
+
+  const handleStopPresentation = () => {
+    if (socketRef.current) {
+      socketRef.current.emit('stop-presentation-media', {
+        roomId: roomData.id,
+      });
+    }
+  };
+
   const videoTracks = tracks.filter((t) => t.kind === Track.Kind.Video);
   const audioTracks = tracks.filter((t) => t.kind === Track.Kind.Audio);
+  const isPresenter = sharedMedia && sharedMedia.presenterName === displayName;
 
   return (
     <div className="call-layout">
@@ -205,7 +233,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           <button
             className="btn-outline"
             style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-            onClick={() => { setNewNickname(displayName); setShowRenameModal(true); }}
+            onClick={() => { setNewNickname(displayName); setShowRenameModal(false); }}
           >
             <Edit3 size={12} /> Rename
           </button>
@@ -220,15 +248,25 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           </div>
         )}
 
-        <div className="video-grid">
-          {videoTracks.map((item) => (
-            <TrackTile
-              key={item.sid}
-              item={item}
-              activeFilter={activeFilter}
-              activeBg={activeBg}
-            />
-          ))}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+          {/* Shared Presentation Stage */}
+          <PresentationStage
+            media={sharedMedia}
+            isPresenter={isPresenter}
+            onStopPresentation={handleStopPresentation}
+          />
+
+          {/* Participant Video Grid */}
+          <div className="video-grid">
+            {videoTracks.map((item) => (
+              <TrackTile
+                key={item.sid}
+                item={item}
+                activeFilter={activeFilter}
+                activeBg={activeBg}
+              />
+            ))}
+          </div>
         </div>
 
         {audioTracks.map((item) => (
@@ -251,6 +289,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             room={roomRef.current}
             onClose={() => setShowInjector(false)}
             onActiveStateChange={(active) => setInjectingClip(active)}
+            onSharePresentation={handleSharePresentation}
           />
         )}
 
@@ -283,7 +322,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         <button
           className={`control-btn ${injectingClip ? 'active' : ''}`}
           onClick={() => setShowInjector((prev) => !prev)}
-          title="Inject Media Clip from Library"
+          title="Inject Media (Images, Video, Audio)"
         >
           <Film size={20} />
         </button>
