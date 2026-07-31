@@ -15,9 +15,9 @@ function getLiveKitCredentials() {
   let apiSecret = (process.env.LIVEKIT_API_SECRET || '').trim();
   let rawUrl = (process.env.LIVEKIT_URL || '').trim();
 
-  if (!apiKey || apiKey.length < 5) apiKey = ACTIVE_LIVEKIT_KEY;
-  if (!apiSecret || apiSecret.length < 20) apiSecret = ACTIVE_LIVEKIT_SECRET;
-  if (!rawUrl || !rawUrl.includes('livekit.cloud')) rawUrl = ACTIVE_LIVEKIT_URL;
+  if (!apiKey || apiKey.length < 5 || apiKey.includes('xxxx')) apiKey = ACTIVE_LIVEKIT_KEY;
+  if (!apiSecret || apiSecret.length < 20 || apiSecret.includes('xxxx')) apiSecret = ACTIVE_LIVEKIT_SECRET;
+  if (!rawUrl || rawUrl.includes('xxxx') || !rawUrl.includes('omnicall-gfhd6nn2')) rawUrl = ACTIVE_LIVEKIT_URL;
 
   if (!rawUrl.startsWith('wss://') && !rawUrl.startsWith('ws://')) {
     rawUrl = `wss://${rawUrl.replace(/^https?:\/\//, '')}`;
