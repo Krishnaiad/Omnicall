@@ -137,9 +137,15 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     };
   }, [token, roomData.id, isOwner, user.id]);
 
-  // LiveKit connection
+  // LiveKit connection with robust URL scheme fallback
   useEffect(() => {
-    const livekitUrl = import.meta.env.VITE_LIVEKIT_URL || 'ws://localhost:7880';
+    let rawUrl = import.meta.env.VITE_LIVEKIT_URL || 'wss://omnicall-gfhd6nn2.livekit.cloud';
+    rawUrl = rawUrl.trim();
+    if (!rawUrl.startsWith('wss://') && !rawUrl.startsWith('ws://')) {
+      rawUrl = `wss://${rawUrl.replace(/^https?:\/\//, '')}`;
+    }
+    const livekitUrl = rawUrl;
+
     const room = new Room({ adaptiveStream: true, dynacast: true });
     roomRef.current = room;
 

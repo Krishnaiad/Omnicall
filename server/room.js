@@ -6,6 +6,18 @@ import { requireAuth } from './auth.js';
 const router = Router();
 router.use(requireAuth);
 
+const DEFAULT_LIVEKIT_KEY = 'APIuDM3eSdCaGwg';
+const DEFAULT_LIVEKIT_SECRET = 'VeFBySdnkeXXUT1Ideezc0T32mzfoUe5Z3bmMwIc3fea';
+const DEFAULT_LIVEKIT_URL = 'wss://omnicall-gfhd6nn2.livekit.cloud';
+
+function getLiveKitCredentials() {
+  const apiKey = (process.env.LIVEKIT_API_KEY || DEFAULT_LIVEKIT_KEY).trim();
+  const apiSecret = (process.env.LIVEKIT_API_SECRET || DEFAULT_LIVEKIT_SECRET).trim();
+  const rawUrl = (process.env.LIVEKIT_URL || DEFAULT_LIVEKIT_URL).trim();
+  const httpUrl = rawUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+  return { apiKey, apiSecret, rawUrl, httpUrl };
+}
+
 async function isMember(roomId, userId) {
   const row = await db.queryGet('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?', [roomId, userId]);
   return !!row;
@@ -13,15 +25,10 @@ async function isMember(roomId, userId) {
 
 // LiveKit Diagnostic Endpoint to verify credentials against LiveKit Cloud
 router.get('/debug-livekit', async (req, res) => {
-  const { LIVEKIT_API_KEY, LIVEKIT_API_SECRET } = process.env;
-  const apiKey = (LIVEKIT_API_KEY || '').trim();
-  const apiSecret = (LIVEKIT_API_SECRET || '').trim();
-  const livekitUrl = (process.env.LIVEKIT_URL || 'wss://omnicall-gfhd6nn2.livekit.cloud')
-    .replace('wss://', 'https://')
-    .replace('ws://', 'http://');
+  const { apiKey, apiSecret, httpUrl } = getLiveKitCredentials();
 
   try {
-    const roomService = new RoomServiceClient(livekitUrl, apiKey, apiSecret);
+    const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
     const liveRooms = await roomService.listRooms();
     res.json({
       ok: true,
@@ -112,11 +119,11 @@ router.post('/:roomId/invite', async (req, res) => {
   }
 });
 
-// Issue a LiveKit access token — with unique identity + clock drift tolerance
+// Issue a LiveKit access token — with unique identity & robust credential fallback
 router.post('/:roomId/token', async (req, res) => {
   const { roomId } = req.params;
   const { displayName } = req.body || {};
-  const { LIVEKIT_API_KEY, LIVEKIT_API_SECRET } = process.env;
+  const { apiKey, apiSecret } = getLiveKitCredentials();
 
   try {
     const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
@@ -127,14 +134,6 @@ router.post('/:roomId/token', async (req, res) => {
       return res.status(403).json({ error: 'You are not a member of this room' });
     }
 
-    const apiKey = (LIVEKIT_API_KEY || '').trim();
-    const apiSecret = (LIVEKIT_API_SECRET || '').trim();
-
-    if (!apiKey || !apiSecret) {
-      console.error('Server missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET!');
-      return res.status(500).json({ error: 'Server is missing LiveKit credentials' });
-    }
-
     const effectiveName = (displayName && displayName.trim()) ? displayName.trim().slice(0, 50) : req.user.name;
     const uniqueIdentity = `${req.user.id}_${Date.now()}`;
 
@@ -143,8 +142,7 @@ router.post('/:roomId/token', async (req, res) => {
       name: effectiveName,
       ttl: '2h',
     });
-    
-    // Explicit grants for LiveKit Cloud
+
     at.addGrant({
       roomJoin: true,
       room: roomId,
