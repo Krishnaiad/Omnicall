@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Room, RoomEvent, Track, LocalVideoTrack } from 'livekit-client';
 import { io } from 'socket.io-client';
-import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check } from 'lucide-react';
+import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check, UserPlus, Pin, PinOff } from 'lucide-react';
 import MediaInjector from './MediaInjector.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import EffectsPicker, { VIDEO_FILTERS, VIRTUAL_BACKGROUNDS } from './EffectsPicker.jsx';
 import PresentationStage from './PresentationStage.jsx';
+import InCallInviteModal from './InCallInviteModal.jsx';
 import { captureRoomSnapshot } from './snapshotUtils.js';
 
-function TrackTile({ item, activeFilter, activeBg }) {
+function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin }) {
   const elRef = useRef(null);
 
   useEffect(() => {
@@ -30,7 +31,12 @@ function TrackTile({ item, activeFilter, activeBg }) {
   const displayLabel = item.name || (item.identity.includes('_') ? item.identity.split('_').slice(1).join('_') : item.identity);
 
   return (
-    <div className="video-tile" style={bgObj ? bgObj.style : {}}>
+    <div
+      className={`video-tile ${isPinned ? 'pinned-tile' : ''}`}
+      style={bgObj ? bgObj.style : { cursor: 'pointer' }}
+      onDoubleClick={onTogglePin}
+      title="Double-click to Spotlight / Pin to Max View"
+    >
       <video
         ref={elRef}
         autoPlay
@@ -38,9 +44,18 @@ function TrackTile({ item, activeFilter, activeBg }) {
         muted={item.isLocal}
         style={{ filter: filterObj ? filterObj.css : 'none' }}
       />
-      <div className="tile-overlay">
-        <span>{displayLabel}</span>
-        {item.isLocal && <span style={{ opacity: 0.7 }}>(you)</span>}
+      <div className="tile-overlay" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <span>{displayLabel}</span>
+          {item.isLocal && <span style={{ opacity: 0.7, marginLeft: '4px' }}>(you)</span>}
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
+          style={{ background: 'rgba(0,0,0,0.4)', border: 'none', color: '#fff', borderRadius: '4px', padding: '2px 4px', cursor: 'pointer' }}
+          title={isPinned ? "Unpin Video" : "Spotlight Video"}
+        >
+          {isPinned ? <PinOff size={14} color="#f472b6" /> : <Pin size={14} />}
+        </button>
       </div>
     </div>
   );
@@ -56,6 +71,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   const [sharedMedia, setSharedMedia] = useState(null);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
 
+  // Double-Click Pin / Spotlight State
+  const [pinnedTrackSid, setPinnedTrackSid] = useState(null);
+
   // Screen Share Permission & Approval State
   const [isScreenShareApproved, setIsScreenShareApproved] = useState(false);
   const [pendingPermissionRequest, setPendingPermissionRequest] = useState(null);
@@ -65,11 +83,13 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   const [showInjector, setShowInjector] = useState(false);
   const [showEffects, setShowEffects] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showInCallInvite, setShowInCallInvite] = useState(false);
   const [showRenameModal, setShowRenameModal] = useState(false);
+  const [showEndMeetingConfirm, setShowEndMeetingConfirm] = useState(false);
   const [newNickname, setNewNickname] = useState('');
   
-  // Real-time Snapshot Notification Toast
-  const [snapshotToast, setSnapshotToast] = useState(null);
+  // Real-time Toast Banner
+  const [toastNotice, setToastNotice] = useState(null);
 
   // Effects selection
   const [activeFilter, setActiveFilter] = useState('none');
@@ -91,9 +111,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
   const removeTrack = useCallback((sid) => {
     setTracks((prev) => prev.filter((t) => t.sid !== sid));
+    setPinnedTrackSid((prev) => (prev === sid ? null : prev));
   }, []);
 
-  // Socket.io connection for chat, snapshots, and screen share authorization
+  // Socket.io connection for chat, snapshots, end-meeting, and display name sync
   useEffect(() => {
     const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
     const socket = io(serverUrl, { auth: { token } });
@@ -103,9 +124,20 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       socket.emit('join-room', { roomId: roomData.id });
     });
 
+    socket.on('meeting-ended', ({ endedBy }) => {
+      alert(`The meeting was ended for everyone by ${endedBy}.`);
+      onLeave();
+    });
+
+    socket.on('participant-renamed', ({ userId, newDisplayName }) => {
+      setTracks((prev) =>
+        prev.map((t) => (t.identity.startsWith(userId) ? { ...t, name: newDisplayName } : t))
+      );
+    });
+
     socket.on('snapshot-notification', (data) => {
-      setSnapshotToast(`📸 Room Memory Snapshot captured by ${data.takenBy}!`);
-      setTimeout(() => setSnapshotToast(null), 4500);
+      setToastNotice(`📸 Room Memory Snapshot captured by ${data.takenBy}!`);
+      setTimeout(() => setToastNotice(null), 4500);
     });
 
     socket.on('presentation-media-changed', (mediaData) => {
@@ -113,14 +145,12 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       if (!mediaData) setIsSharingScreen(false);
     });
 
-    // Owner receives permission request popup
     socket.on('screen-share-request-received', (data) => {
       if (isOwner && data.requesterUserId !== user.id) {
         setPendingPermissionRequest(data);
       }
     });
 
-    // Participant receives permission response
     socket.on('screen-share-permission-result', ({ allowed }) => {
       setRequestSentNotice(false);
       if (allowed) {
@@ -134,9 +164,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     return () => {
       socket.disconnect();
     };
-  }, [token, roomData.id, isOwner, user.id]);
+  }, [token, roomData.id, isOwner, user.id, onLeave]);
 
-  // LiveKit connection with URL fallback and sanitization
+  // LiveKit connection with URL scheme fallback
   useEffect(() => {
     let rawUrl = (import.meta.env.VITE_LIVEKIT_URL || 'wss://omnicall-gfhd6nn2.livekit.cloud').trim();
     if (!rawUrl || rawUrl.includes('xxxx') || !rawUrl.includes('omnicall-gfhd6nn2')) {
@@ -214,6 +244,14 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     setTracks((prev) =>
       prev.map((t) => (t.isLocal ? { ...t, name: updated } : t))
     );
+
+    if (socketRef.current) {
+      socketRef.current.emit('user-renamed', {
+        roomId: roomData.id,
+        newDisplayName: updated,
+      });
+    }
+
     setShowRenameModal(false);
   };
 
@@ -253,6 +291,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       setIsSharingScreen(false);
     }
 
+    setSharedMedia(null);
+
     if (socketRef.current) {
       socketRef.current.emit('stop-presentation-media', {
         roomId: roomData.id,
@@ -260,7 +300,6 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     }
   };
 
-  // Screen Share trigger handler
   const handleScreenShareClick = () => {
     if (isSharingScreen) {
       handleStopPresentation();
@@ -280,7 +319,6 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     }
   };
 
-  // Start native screen share via getDisplayMedia
   const startNativeScreenShare = async () => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -317,7 +355,6 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     }
   };
 
-  // Owner responds to permission request
   const handleRespondPermission = (allowed) => {
     if (pendingPermissionRequest && socketRef.current) {
       socketRef.current.emit('respond-screen-share-permission', {
@@ -328,9 +365,19 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     }
   };
 
+  const handleEndMeetingForAll = () => {
+    if (socketRef.current) {
+      socketRef.current.emit('end-meeting-for-all', { roomId: roomData.id });
+    }
+    onLeave();
+  };
+
   const videoTracks = tracks.filter((t) => t.kind === Track.Kind.Video);
   const audioTracks = tracks.filter((t) => t.kind === Track.Kind.Audio);
   const isPresenter = sharedMedia && sharedMedia.presenterName === displayName;
+
+  const pinnedTrack = videoTracks.find((t) => t.sid === pinnedTrackSid);
+  const unpinnedVideoTracks = pinnedTrack ? videoTracks.filter((t) => t.sid !== pinnedTrackSid) : videoTracks;
 
   return (
     <div className="call-layout">
@@ -351,10 +398,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       </header>
 
       <div className="call-body">
-        {/* Real-time Snapshot Toast Banner */}
-        {snapshotToast && (
+        {toastNotice && (
           <div className="snapshot-toast-banner">
-            {snapshotToast}
+            {toastNotice}
           </div>
         )}
 
@@ -366,14 +412,31 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             onStopPresentation={handleStopPresentation}
           />
 
+          {/* Double-Clicked Spotlight / Pinned Hero Video Stage */}
+          {pinnedTrack && (
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '12px' }}>
+              <div style={{ width: '100%', height: '100%', maxHeight: '60vh', borderRadius: '12px', overflow: 'hidden', border: '2px solid #ec4899', boxShadow: '0 8px 32px rgba(236,72,153,0.3)' }}>
+                <TrackTile
+                  item={pinnedTrack}
+                  activeFilter={activeFilter}
+                  activeBg={activeBg}
+                  isPinned={true}
+                  onTogglePin={() => setPinnedTrackSid(null)}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Participant Video Grid */}
-          <div className="video-grid">
-            {videoTracks.map((item) => (
+          <div className="video-grid" style={sharedMedia || pinnedTrack ? { gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', maxHeight: '180px' } : {}}>
+            {unpinnedVideoTracks.map((item) => (
               <TrackTile
                 key={item.sid}
                 item={item}
                 activeFilter={activeFilter}
                 activeBg={activeBg}
+                isPinned={false}
+                onTogglePin={() => setPinnedTrackSid(item.sid)}
               />
             ))}
           </div>
@@ -410,6 +473,15 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             onClose={() => setShowChat(false)}
           />
         )}
+
+        {showInCallInvite && (
+          <InCallInviteModal
+            token={token}
+            roomId={roomData.id}
+            roomName={roomData.name}
+            onClose={() => setShowInCallInvite(false)}
+          />
+        )}
       </div>
 
       <footer className="call-controls">
@@ -419,6 +491,15 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
         <button className={`control-btn ${!camOn ? 'danger' : ''}`} onClick={toggleCam} title="Toggle Camera">
           {camOn ? <VideoIcon size={20} /> : <VideoOff size={20} />}
+        </button>
+
+        <button
+          className="control-btn"
+          onClick={() => setShowInCallInvite(true)}
+          title="Invite People by Username / Email"
+          style={{ background: 'rgba(99, 102, 241, 0.25)', borderColor: '#818cf8' }}
+        >
+          <UserPlus size={20} color="#818cf8" />
         </button>
 
         <button
@@ -474,12 +555,21 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           <MessageSquare size={20} />
         </button>
 
-        <button className="control-btn danger" onClick={onLeave} title="Leave Call">
+        <button
+          className="control-btn danger"
+          onClick={() => {
+            if (isOwner) {
+              setShowEndMeetingConfirm(true);
+            } else {
+              onLeave();
+            }
+          }}
+          title="Leave or End Call"
+        >
           <PhoneOff size={20} />
         </button>
       </footer>
 
-      {/* Request Sent Notice for Participant */}
       {requestSentNotice && (
         <div className="snapshot-toast-banner" style={{ background: 'linear-gradient(135deg, #6366f1, #818cf8)' }}>
           ⌛ Permission request sent to room creator... Please wait for approval.
@@ -513,6 +603,40 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
                 style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', background: 'linear-gradient(135deg, #10b981, #059669)' }}
               >
                 <Check size={16} /> Allow Share
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Owner End Meeting for All Confirmation Modal */}
+      {showEndMeetingConfirm && (
+        <div className="modal-backdrop">
+          <div className="glass-card modal-box" style={{ width: '360px' }}>
+            <span style={{ fontWeight: 600, fontSize: '1.125rem', display: 'block', marginBottom: '12px' }}>Meeting Control</span>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+              You are the room creator. Would you like to leave the meeting or end it for all participants?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                className="btn-primary"
+                onClick={handleEndMeetingForAll}
+                style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)' }}
+              >
+                End Meeting for All
+              </button>
+              <button
+                className="btn-outline"
+                onClick={onLeave}
+              >
+                Just Leave Meeting
+              </button>
+              <button
+                className="btn-outline"
+                onClick={() => setShowEndMeetingConfirm(false)}
+                style={{ border: 'none', color: 'var(--text-muted)' }}
+              >
+                Cancel
               </button>
             </div>
           </div>

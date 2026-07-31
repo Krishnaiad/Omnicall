@@ -32,6 +32,11 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` },
     }),
 
+  searchUsers: (token, query) =>
+    request(`/api/rooms/search-users?q=${encodeURIComponent(query)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
   listRooms: (token) =>
     request('/api/rooms', {
       headers: { Authorization: `Bearer ${token}` },
@@ -47,14 +52,26 @@ export const api = {
       body: JSON.stringify({ name }),
     }),
 
-  inviteToRoom: (token, roomId, email) =>
+  inviteToRoom: (token, roomId, query) =>
     request(`/api/rooms/${roomId}/invite`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ query }),
+    }),
+
+  deleteRoom: (token, roomId) =>
+    request(`/api/rooms/${roomId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  leaveRoom: (token, roomId) =>
+    request(`/api/rooms/${roomId}/leave`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
     }),
 
   getRoomToken: (token, roomId, displayName) =>

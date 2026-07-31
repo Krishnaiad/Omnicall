@@ -51,18 +51,49 @@ router.get('/debug-livekit', async (req, res) => {
   }
 });
 
-// Create a room. Creator becomes owner and first member.
+// Search users by username or email for in-call invites
+router.get('/search-users', async (req, res) => {
+  const q = (req.query.q || '').trim().toLowerCase();
+  if (!q) return res.json({ users: [] });
+
+  try {
+    const users = await db.queryAll(
+      `SELECT id, username, name, email FROM users 
+       WHERE (LOWER(username) LIKE ? OR LOWER(name) LIKE ? OR LOWER(email) LIKE ?) 
+       AND id != ?
+       LIMIT 10`,
+      [`%${q}%`, `%${q}%`, `%${q}%`, req.user.id]
+    );
+    res.json({ users });
+  } catch (err) {
+    console.error('Search users failed:', err);
+    res.status(500).json({ error: 'Failed to search users' });
+  }
+});
+
+// Create a room. Enforces unique room names per creator.
 router.post('/', async (req, res) => {
   const { name } = req.body || {};
   if (!name || !name.trim() || name.length > 80) {
     return res.status(400).json({ error: 'Room name is required (max 80 characters)' });
   }
 
-  const id = randomUUID();
+  const trimmedName = name.trim();
+
   try {
-    await db.queryRun('INSERT INTO rooms (id, name, owner_id) VALUES (?, ?, ?)', [id, name.trim(), req.user.id]);
+    // Check unique room name for this creator
+    const existing = await db.queryGet(
+      'SELECT 1 FROM rooms WHERE owner_id = ? AND LOWER(name) = LOWER(?)',
+      [req.user.id, trimmedName]
+    );
+    if (existing) {
+      return res.status(400).json({ error: `You already have a room named "${trimmedName}". Please choose a unique room name.` });
+    }
+
+    const id = randomUUID();
+    await db.queryRun('INSERT INTO rooms (id, name, owner_id) VALUES (?, ?, ?)', [id, trimmedName, req.user.id]);
     await db.queryRun('INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, ?)', [id, req.user.id, 'owner']);
-    res.status(201).json({ id, name: name.trim(), owner_id: req.user.id, role: 'owner' });
+    res.status(201).json({ id, name: trimmedName, owner_id: req.user.id, role: 'owner' });
   } catch (err) {
     console.error('Create room failed:', err);
     res.status(500).json({ error: 'Failed to create room' });
@@ -88,10 +119,11 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Add an existing user (by email) to a room. Owner only.
+// Invite a user by Username OR Email. Owner only.
 router.post('/:roomId/invite', async (req, res) => {
   const { roomId } = req.params;
-  const { email } = req.body || {};
+  const { query, email, username } = req.body || {};
+  const searchTerm = (query || username || email || '').trim().toLowerCase();
 
   try {
     const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
@@ -99,11 +131,15 @@ router.post('/:roomId/invite', async (req, res) => {
     if (room.owner_id !== req.user.id) {
       return res.status(403).json({ error: 'Only the room owner can invite members' });
     }
-    if (!email) return res.status(400).json({ error: 'Email is required' });
+    if (!searchTerm) return res.status(400).json({ error: 'Username or email is required' });
 
-    const invitee = await db.queryGet('SELECT * FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+    const invitee = await db.queryGet(
+      'SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?',
+      [searchTerm, searchTerm]
+    );
+
     if (!invitee) {
-      return res.status(404).json({ error: 'No account found with that email. Please ask them to sign up first.' });
+      return res.status(404).json({ error: `No user found matching "${searchTerm}". Please check the username/email.` });
     }
 
     const existingMember = await db.queryGet('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?', [roomId, invitee.id]);
@@ -116,10 +152,51 @@ router.post('/:roomId/invite', async (req, res) => {
       io.emit('room-invited-notice', { inviteeUserId: invitee.id, roomId, roomName: room.name });
     }
 
-    res.json({ ok: true, member: { id: invitee.id, email: invitee.email, name: invitee.name } });
+    res.json({ ok: true, member: { id: invitee.id, username: invitee.username, email: invitee.email, name: invitee.name } });
   } catch (err) {
     console.error('Invite user failed:', err);
     res.status(500).json({ error: 'Failed to invite user to room' });
+  }
+});
+
+// Delete Room (Owner Only)
+router.delete('/:roomId', async (req, res) => {
+  const { roomId } = req.params;
+
+  try {
+    const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the room owner can delete this room' });
+    }
+
+    await db.queryRun('DELETE FROM chat_messages WHERE room_id = ?', [roomId]);
+    await db.queryRun('DELETE FROM room_members WHERE room_id = ?', [roomId]);
+    await db.queryRun('DELETE FROM rooms WHERE id = ?', [roomId]);
+
+    res.json({ ok: true, message: 'Room deleted successfully' });
+  } catch (err) {
+    console.error('Delete room failed:', err);
+    res.status(500).json({ error: 'Failed to delete room' });
+  }
+});
+
+// Leave Room (Member Only)
+router.delete('/:roomId/leave', async (req, res) => {
+  const { roomId } = req.params;
+
+  try {
+    const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.owner_id === req.user.id) {
+      return res.status(400).json({ error: 'Room owner cannot leave the room. Use Delete Room instead.' });
+    }
+
+    await db.queryRun('DELETE FROM room_members WHERE room_id = ? AND user_id = ?', [roomId, req.user.id]);
+    res.json({ ok: true, message: 'Left room successfully' });
+  } catch (err) {
+    console.error('Leave room failed:', err);
+    res.status(500).json({ error: 'Failed to leave room' });
   }
 });
 
@@ -131,7 +208,7 @@ router.post('/:roomId/token', async (req, res) => {
 
   if (!apiKey || !apiSecret) {
     console.error('Server missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET in environment!');
-    return res.status(500).json({ error: 'Server is missing LiveKit credentials. Please configure LIVEKIT_API_KEY and LIVEKIT_API_SECRET in Render environment.' });
+    return res.status(500).json({ error: 'Server is missing LiveKit credentials.' });
   }
 
   try {

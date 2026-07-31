@@ -62,7 +62,6 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
     }
   };
 
-  // Real-time Socket.io invite notifications & 5-second polling interval
   useEffect(() => {
     fetchRooms();
     fetchClips();
@@ -79,7 +78,6 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
       }
     });
 
-    // Auto-refresh rooms every 5 seconds
     const interval = setInterval(() => {
       fetchRooms();
     }, 5000);
@@ -104,6 +102,32 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
       await api.createRoom(token, newRoomName.trim());
       setNewRoomName('');
       setSuccess('Room created successfully!');
+      fetchRooms();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteRoom = async (roomId, roomName) => {
+    if (!window.confirm(`Are you sure you want to permanently delete room "${roomName}"?`)) return;
+    setError('');
+    setSuccess('');
+    try {
+      await api.deleteRoom(token, roomId);
+      setSuccess(`Room "${roomName}" deleted successfully.`);
+      fetchRooms();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleLeaveRoom = async (roomId, roomName) => {
+    if (!window.confirm(`Are you sure you want to leave room "${roomName}"?`)) return;
+    setError('');
+    setSuccess('');
+    try {
+      await api.leaveRoom(token, roomId);
+      setSuccess(`Left room "${roomName}".`);
       fetchRooms();
     } catch (err) {
       setError(err.message);
@@ -195,7 +219,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
               <Users size={16} /> User Directory
             </button>
           )}
-          <span className="user-info">Signed in as <strong>{user.name}</strong></span>
+          <span className="user-info">Signed in as <strong>{user.name}</strong> ({user.username ? `@${user.username}` : user.email})</span>
           <button className="btn-outline" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <LogOut size={16} /> Logout
           </button>
@@ -223,7 +247,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
           <form onSubmit={handleCreateRoom} style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
             <input
               className="form-control"
-              placeholder="New room name (e.g. Design Sync)"
+              placeholder="New unique room name (e.g. Design Sync)"
               value={newRoomName}
               onChange={(e) => setNewRoomName(e.target.value)}
               maxLength={80}
@@ -248,20 +272,43 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
                         {room.role}
                       </span>
                     </div>
-                    <button
-                      className="btn-primary"
-                      style={{ width: 'auto', padding: '6px 14px', fontSize: '0.875rem' }}
-                      onClick={() => promptJoin(room)}
-                    >
-                      Join Call
-                    </button>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        className="btn-primary"
+                        style={{ width: 'auto', padding: '6px 14px', fontSize: '0.875rem' }}
+                        onClick={() => promptJoin(room)}
+                      >
+                        Join Call
+                      </button>
+
+                      {room.role === 'owner' ? (
+                        <button
+                          className="btn-outline"
+                          onClick={() => handleDeleteRoom(room.id, room.name)}
+                          title="Delete Room permanently (Owner Only)"
+                          style={{ padding: '6px 10px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      ) : (
+                        <button
+                          className="btn-outline"
+                          onClick={() => handleLeaveRoom(room.id, room.name)}
+                          title="Leave Room"
+                          style={{ padding: '6px 10px', color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.4)' }}
+                        >
+                          <LogOut size={16} />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {room.role === 'owner' && (
                     <div className="invite-row">
                       <input
                         className="form-control"
-                        placeholder="Invite member by email"
+                        placeholder="Invite member by username or email"
                         style={{ fontSize: '0.8125rem', padding: '6px 10px' }}
                         value={inviteEmail[room.id] || ''}
                         onChange={(e) => setInviteEmail((prev) => ({ ...prev, [room.id]: e.target.value }))}
@@ -318,8 +365,13 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{clip.mimeType} • {clip.status}</div>
                     </div>
                   </div>
-                  <button onClick={() => handleDeleteClip(clip.id)} style={{ background: 'transparent', color: '#ef4444', border: 'none' }}>
-                    <Trash2 size={16} />
+
+                  <button
+                    className="btn-outline"
+                    onClick={() => handleDeleteClip(clip.id)}
+                    style={{ padding: '4px 8px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                  >
+                    <Trash2 size={14} />
                   </button>
                 </div>
               ))}
@@ -331,43 +383,37 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
       {/* Admin User Directory Modal */}
       {showAdminDirectory && (
         <div className="modal-backdrop">
-          <div className="glass-card modal-box" style={{ maxWidth: '640px', width: '95%' }}>
+          <div className="glass-card modal-box" style={{ width: '540px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ fontWeight: 600, fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#ec4899' }}>
-                <Users size={22} color="#ec4899" /> Registered User Accounts (Admin Only)
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.125rem', color: '#f472b6' }}>
+                <Shield size={20} /> Registered Accounts Directory (Admin Only)
               </div>
               <button onClick={() => setShowAdminDirectory(false)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
             {loadingAdminUsers ? (
-              <p style={{ color: 'var(--text-muted)' }}>Loading user directory...</p>
-            ) : adminUsersList.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)' }}>No accounts registered yet.</p>
+              <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>Loading accounts database...</p>
             ) : (
               <div style={{ maxHeight: '340px', overflowY: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', textAlign: 'left' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: 'var(--text-muted)' }}>
-                      <th style={{ padding: '10px' }}>Name</th>
-                      <th style={{ padding: '10px' }}>Email</th>
-                      <th style={{ padding: '10px' }}>Role</th>
-                      <th style={{ padding: '10px' }}>Registered At</th>
+                    <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                      <th style={{ padding: '8px' }}>Name</th>
+                      <th style={{ padding: '8px' }}>Email</th>
+                      <th style={{ padding: '8px' }}>Role</th>
                     </tr>
                   </thead>
                   <tbody>
                     {adminUsersList.map((u) => (
                       <tr key={u.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                        <td style={{ padding: '10px', fontWeight: 600 }}>{u.name}</td>
-                        <td style={{ padding: '10px', color: '#a5b4fc' }}>{u.email}</td>
-                        <td style={{ padding: '10px' }}>
-                          <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '9999px', fontWeight: 600, background: u.role === 'admin' ? 'rgba(236, 72, 153, 0.2)' : 'rgba(99, 102, 241, 0.2)', color: u.role === 'admin' ? '#f472b6' : '#a5b4fc' }}>
+                        <td style={{ padding: '10px 8px', fontWeight: 500 }}>{u.name}</td>
+                        <td style={{ padding: '10px 8px', color: '#a5b4fc' }}>{u.email}</td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <span style={{ fontSize: '0.75rem', background: u.role === 'admin' ? 'rgba(236,72,153,0.2)' : 'rgba(255,255,255,0.1)', color: u.role === 'admin' ? '#f472b6' : 'var(--text-muted)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
                             {u.role}
                           </span>
-                        </td>
-                        <td style={{ padding: '10px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                          {new Date(u.created_at).toLocaleString()}
                         </td>
                       </tr>
                     ))}
@@ -379,26 +425,19 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
         </div>
       )}
 
-      {/* Join Room Nickname Choice Modal */}
+      {/* Join Call Nickname Modal */}
       {joiningRoom && (
         <div className="modal-backdrop">
-          <div className="glass-card modal-box">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ fontWeight: 600, fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <UserCheck size={20} color="#818cf8" /> Choose In-Room Nickname
-              </div>
+          <div className="glass-card modal-box" style={{ width: '340px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <span style={{ fontWeight: 600 }}>Join {joiningRoom.name}</span>
               <button onClick={() => setJoiningRoom(null)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
-
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Joining <strong>{joiningRoom.name}</strong>. Enter the nickname you want other participants to see in this call:
-            </p>
-
             <form onSubmit={confirmJoin}>
-              <div className="form-group">
-                <label>In-Room Display Name</label>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Display Name in Call</label>
                 <input
                   className="form-control"
                   value={customNickname}
@@ -407,15 +446,9 @@ export default function Dashboard({ token, user, onLogout, onJoinCall }) {
                   required
                 />
               </div>
-
-              <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
-                <button type="button" className="btn-outline" onClick={() => setJoiningRoom(null)} style={{ flex: 1 }}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary" style={{ flex: 1 }}>
-                  Enter Room
-                </button>
-              </div>
+              <button type="submit" className="btn-primary">
+                Confirm & Join
+              </button>
             </form>
           </div>
         </div>

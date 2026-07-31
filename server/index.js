@@ -74,7 +74,6 @@ io.use((socket, next) => {
   }
 });
 
-// Simple server-side string escaping to prevent XSS in chat
 function sanitizeText(str) {
   if (typeof str !== 'string') return '';
   return str
@@ -86,7 +85,6 @@ function sanitizeText(str) {
 }
 
 io.on('connection', (socket) => {
-  // Join user's personal channel for direct notifications
   socket.join(`user_${socket.user.id}`);
 
   socket.on('join-room', async ({ roomId }) => {
@@ -97,7 +95,7 @@ io.on('connection', (socket) => {
     socket.join(roomId);
   });
 
-  socket.on('send-message', ({ roomId, text }) => {
+  socket.on('send-message', async ({ roomId, text }) => {
     if (!text || !text.trim()) return;
 
     const sanitized = sanitizeText(text.trim());
@@ -110,6 +108,23 @@ io.on('connection', (socket) => {
     };
 
     io.to(roomId).emit('new-message', messageObj);
+  });
+
+  // Owner End Meeting for All Broadcast
+  socket.on('end-meeting-for-all', async ({ roomId }) => {
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = ?', [roomId]);
+    if (!room || room.owner_id !== socket.user.id) {
+      return socket.emit('error-msg', { message: 'Only the room creator can end the meeting for all' });
+    }
+    io.to(roomId).emit('meeting-ended', { endedBy: socket.user.name });
+  });
+
+  // Real-time Display Name Update Broadcast
+  socket.on('user-renamed', ({ roomId, newDisplayName }) => {
+    io.to(roomId).emit('participant-renamed', {
+      userId: socket.user.id,
+      newDisplayName,
+    });
   });
 
   // Room Owner Snapshot Broadcast Notification
