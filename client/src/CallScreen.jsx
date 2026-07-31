@@ -30,10 +30,37 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin }) {
   
   const displayLabel = item.name || (item.identity.includes('_') ? item.identity.split('_').slice(1).join('_') : item.identity);
 
+  const filterCss = filterObj && filterObj.css !== 'none' ? filterObj.css : '';
+  let videoFilterStr = filterCss || 'none';
+  let videoStyle = { width: '100%', height: '100%', objectFit: 'cover', transition: 'all 0.3s ease' };
+  let containerStyle = { position: 'relative', cursor: 'pointer' };
+
+  if (bgObj && bgObj.id !== 'none') {
+    if (bgObj.id.startsWith('blur-')) {
+      const blurAmount = bgObj.id === 'blur-deep' ? '18px' : '8px';
+      videoFilterStr = filterCss ? `${filterCss} blur(${blurAmount})` : `blur(${blurAmount})`;
+    } else if (bgObj.style && bgObj.style.background) {
+      containerStyle = {
+        ...containerStyle,
+        background: bgObj.style.background,
+        padding: '10px',
+        boxShadow: '0 0 30px rgba(99, 102, 241, 0.3)',
+      };
+      videoStyle = {
+        ...videoStyle,
+        borderRadius: '10px',
+        border: '2px solid rgba(255, 255, 255, 0.2)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
+      };
+    }
+  }
+
+  videoStyle.filter = videoFilterStr;
+
   return (
     <div
       className={`video-tile ${isPinned ? 'pinned-tile' : ''}`}
-      style={bgObj ? bgObj.style : { cursor: 'pointer' }}
+      style={containerStyle}
       onDoubleClick={onTogglePin}
       title="Double-click to Spotlight / Pin to Max View"
     >
@@ -42,7 +69,7 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin }) {
         autoPlay
         playsInline
         muted={item.isLocal}
-        style={{ filter: filterObj ? filterObj.css : 'none' }}
+        style={videoStyle}
       />
       <div className="tile-overlay" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -51,7 +78,7 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin }) {
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
-          style={{ background: 'rgba(0,0,0,0.4)', border: 'none', color: '#fff', borderRadius: '4px', padding: '2px 4px', cursor: 'pointer' }}
+          style={{ background: 'rgba(0,0,0,0.5)', border: 'none', color: '#fff', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer' }}
           title={isPinned ? "Unpin Video" : "Spotlight Video"}
         >
           {isPinned ? <PinOff size={14} color="#f472b6" /> : <Pin size={14} />}
