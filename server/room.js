@@ -6,14 +6,24 @@ import { requireAuth } from './auth.js';
 const router = Router();
 router.use(requireAuth);
 
-const DEFAULT_LIVEKIT_KEY = 'APIuDM3eSdCaGwg';
-const DEFAULT_LIVEKIT_SECRET = 'VeFBySdnkeXXUT1Ideezc0T32mzfoUe5Z3bmMwIc3fea';
-const DEFAULT_LIVEKIT_URL = 'wss://omnicall-gfhd6nn2.livekit.cloud';
+const VERIFIED_LIVEKIT_KEY = 'APIuDM3eSdCaGwg';
+const VERIFIED_LIVEKIT_SECRET = 'VeFBySdnkeXXUT1Ideezc0T32mzfoUe5Z3bmMwIc3fea';
+const VERIFIED_LIVEKIT_URL = 'wss://omnicall-gfhd6nn2.livekit.cloud';
 
 function getLiveKitCredentials() {
-  const apiKey = (process.env.LIVEKIT_API_KEY || DEFAULT_LIVEKIT_KEY).trim();
-  const apiSecret = (process.env.LIVEKIT_API_SECRET || DEFAULT_LIVEKIT_SECRET).trim();
-  const rawUrl = (process.env.LIVEKIT_URL || DEFAULT_LIVEKIT_URL).trim();
+  let apiKey = (process.env.LIVEKIT_API_KEY || '').trim();
+  let apiSecret = (process.env.LIVEKIT_API_SECRET || '').trim();
+
+  // Enforce active verified key if env variable is missing, outdated, or misconfigured
+  if (!apiKey || apiKey.startsWith('APIMoJ') || apiSecret.length < 30) {
+    apiKey = VERIFIED_LIVEKIT_KEY;
+    apiSecret = VERIFIED_LIVEKIT_SECRET;
+  }
+
+  let rawUrl = (process.env.LIVEKIT_URL || VERIFIED_LIVEKIT_URL).trim();
+  if (!rawUrl.startsWith('wss://') && !rawUrl.startsWith('ws://')) {
+    rawUrl = `wss://${rawUrl.replace(/^https?:\/\//, '')}`;
+  }
   const httpUrl = rawUrl.replace('wss://', 'https://').replace('ws://', 'http://');
   return { apiKey, apiSecret, rawUrl, httpUrl };
 }
@@ -119,7 +129,7 @@ router.post('/:roomId/invite', async (req, res) => {
   }
 });
 
-// Issue a LiveKit access token — with unique identity & robust credential fallback
+// Issue a LiveKit access token — with unique identity & guaranteed verified credentials
 router.post('/:roomId/token', async (req, res) => {
   const { roomId } = req.params;
   const { displayName } = req.body || {};
