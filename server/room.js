@@ -11,20 +11,10 @@ const VERIFIED_LIVEKIT_SECRET = 'VeFBySdnkeXXUT1Ideezc0T32mzfoUe5Z3bmMwIc3fea';
 const VERIFIED_LIVEKIT_URL = 'wss://omnicall-gfhd6nn2.livekit.cloud';
 
 function getLiveKitCredentials() {
-  let apiKey = (process.env.LIVEKIT_API_KEY || '').trim();
-  let apiSecret = (process.env.LIVEKIT_API_SECRET || '').trim();
-
-  // Enforce active verified key if env variable is missing, outdated, or misconfigured
-  if (!apiKey || apiKey.startsWith('APIMoJ') || apiSecret.length < 30) {
-    apiKey = VERIFIED_LIVEKIT_KEY;
-    apiSecret = VERIFIED_LIVEKIT_SECRET;
-  }
-
-  let rawUrl = (process.env.LIVEKIT_URL || VERIFIED_LIVEKIT_URL).trim();
-  if (!rawUrl.startsWith('wss://') && !rawUrl.startsWith('ws://')) {
-    rawUrl = `wss://${rawUrl.replace(/^https?:\/\//, '')}`;
-  }
-  const httpUrl = rawUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+  const apiKey = VERIFIED_LIVEKIT_KEY;
+  const apiSecret = VERIFIED_LIVEKIT_SECRET;
+  const rawUrl = VERIFIED_LIVEKIT_URL;
+  const httpUrl = 'https://omnicall-gfhd6nn2.livekit.cloud';
   return { apiKey, apiSecret, rawUrl, httpUrl };
 }
 
@@ -42,7 +32,7 @@ router.get('/debug-livekit', async (req, res) => {
     const liveRooms = await roomService.listRooms();
     res.json({
       ok: true,
-      apiKeyPrefix: apiKey ? `${apiKey.slice(0, 6)}...` : 'MISSING',
+      apiKeyPrefix: `${apiKey.slice(0, 6)}...`,
       apiSecretLength: apiSecret.length,
       liveRoomsCount: liveRooms.length,
     });
@@ -50,7 +40,7 @@ router.get('/debug-livekit', async (req, res) => {
     console.error('[LiveKit Debug Error]:', err.message);
     res.status(400).json({
       ok: false,
-      apiKeyPrefix: apiKey ? `${apiKey.slice(0, 6)}...` : 'MISSING',
+      apiKeyPrefix: `${apiKey.slice(0, 6)}...`,
       apiSecretLength: apiSecret.length,
       error: err.message,
     });
