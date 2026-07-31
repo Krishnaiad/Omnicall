@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { AccessToken } from 'livekit-server-sdk';
+import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { db, randomUUID } from './db.js';
 import { requireAuth } from './auth.js';
 
@@ -10,6 +10,35 @@ async function isMember(roomId, userId) {
   const row = await db.queryGet('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?', [roomId, userId]);
   return !!row;
 }
+
+// LiveKit Diagnostic Endpoint to verify credentials against LiveKit Cloud
+router.get('/debug-livekit', async (req, res) => {
+  const { LIVEKIT_API_KEY, LIVEKIT_API_SECRET } = process.env;
+  const apiKey = (LIVEKIT_API_KEY || '').trim();
+  const apiSecret = (LIVEKIT_API_SECRET || '').trim();
+  const livekitUrl = (process.env.LIVEKIT_URL || 'wss://omnicall-gfhd6nn2.livekit.cloud')
+    .replace('wss://', 'https://')
+    .replace('ws://', 'http://');
+
+  try {
+    const roomService = new RoomServiceClient(livekitUrl, apiKey, apiSecret);
+    const liveRooms = await roomService.listRooms();
+    res.json({
+      ok: true,
+      apiKeyPrefix: apiKey ? `${apiKey.slice(0, 6)}...` : 'MISSING',
+      apiSecretLength: apiSecret.length,
+      liveRoomsCount: liveRooms.length,
+    });
+  } catch (err) {
+    console.error('[LiveKit Debug Error]:', err.message);
+    res.status(400).json({
+      ok: false,
+      apiKeyPrefix: apiKey ? `${apiKey.slice(0, 6)}...` : 'MISSING',
+      apiSecretLength: apiSecret.length,
+      error: err.message,
+    });
+  }
+});
 
 // Create a room. Creator becomes owner and first member.
 router.post('/', async (req, res) => {
@@ -71,7 +100,6 @@ router.post('/:roomId/invite', async (req, res) => {
       await db.queryRun('INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, ?)', [roomId, invitee.id, 'member']);
     }
 
-    // Emit Real-time Socket.io Notification to Invited User
     if (req.app.get('io')) {
       const io = req.app.get('io');
       io.emit('room-invited-notice', { inviteeUserId: invitee.id, roomId, roomName: room.name });
@@ -84,7 +112,7 @@ router.post('/:roomId/invite', async (req, res) => {
   }
 });
 
-// Issue a LiveKit access token — with unique identity + custom display name
+// Issue a LiveKit access token — with unique identity + clock drift tolerance
 router.post('/:roomId/token', async (req, res) => {
   const { roomId } = req.params;
   const { displayName } = req.body || {};
@@ -115,7 +143,15 @@ router.post('/:roomId/token', async (req, res) => {
       name: effectiveName,
       ttl: '2h',
     });
-    at.addGrant({ roomJoin: true, room: roomId, canPublish: true, canSubscribe: true });
+    
+    // Explicit grants for LiveKit Cloud
+    at.addGrant({
+      roomJoin: true,
+      room: roomId,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+    });
 
     const token = await at.toJwt();
     res.json({ token, roomName: room.name, roomId: room.id, displayName: effectiveName });
