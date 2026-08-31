@@ -339,9 +339,10 @@ router.post('/:roomId/end-meeting', async (req, res) => {
 
     // 2. Mark all live_sessions as ended
     await db.queryRun(
-      'UPDATE live_sessions SET left_at = NOW(), disconnect_reason = ? WHERE room_id = ? AND left_at IS NULL',
+      'UPDATE live_sessions SET left_at = CURRENT_TIMESTAMP, disconnect_reason = ? WHERE room_id = ? AND left_at IS NULL',
       ['host_ended_meeting', roomId]
     ).catch(() => {});
+
 
     res.json({ ok: true, message: 'Meeting ended successfully for all participants' });
   } catch (err) {
