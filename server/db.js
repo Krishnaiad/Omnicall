@@ -237,6 +237,14 @@ const TABLE_STATEMENTS = [
     expires_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+  // verification_otps: Stores 6-digit email signup OTP codes with 10-minute expiry
+  `CREATE TABLE IF NOT EXISTS verification_otps (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    otp_code TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
 ];
 
 // Migration: add column if missing (safe for both SQLite and Postgres)

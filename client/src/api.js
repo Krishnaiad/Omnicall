@@ -80,12 +80,27 @@ export const api = {
     }),
 
 
+  sendOtp: (email) =>
+    request('/api/auth/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    }),
+
+  verifyOtpRegister: (email, otp, password, name, username) =>
+    request('/api/auth/verify-otp-register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp, password, name, username }),
+    }),
+
   register: (email, password, name) =>
     request('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, name }),
     }),
+
 
   login: (email, password) =>
     request('/api/auth/login', {

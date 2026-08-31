@@ -35,6 +35,191 @@ export function signRefreshToken(user) {
 export const signToken = signAccessToken;
 
 
+import nodemailer from 'nodemailer';
+
+// Helper to create email transporter with graceful fallback
+function getEmailTransporter() {
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER || process.env.GMAIL_USER;
+  const pass = process.env.SMTP_PASS || process.env.GMAIL_PASS;
+
+  if (host && user && pass) {
+    return nodemailer.createTransport({
+      host,
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: { user, pass },
+    });
+  }
+
+  if (user && pass) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user, pass },
+    });
+  }
+
+  return null;
+}
+
+// Send OTP Verification Email
+async function sendOtpEmail(recipientEmail, otpCode) {
+  const transporter = getEmailTransporter();
+  const fromAddress = process.env.SMTP_FROM || process.env.GMAIL_USER || 'no-reply@omnicall.com';
+
+  console.log(`\n======================================================`);
+  console.log(`🔑 [OmniCall Security] 6-Digit Signup OTP Code: ${otpCode}`);
+  console.log(`📧 Target Email: ${recipientEmail}`);
+  console.log(`======================================================\n`);
+
+  if (!transporter) {
+    return { sent: false, devMode: true };
+  }
+
+  try {
+    await transporter.sendMail({
+      from: `"OmniCall Security" <${fromAddress}>`,
+      to: recipientEmail,
+      subject: `Your OmniCall Verification Code: ${otpCode}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; background: #070a13; color: #fff; padding: 24px; border-radius: 12px;">
+          <h2 style="color: #818cf8; margin-bottom: 12px;">OmniCall Account Verification</h2>
+          <p style="color: #cbd5e1; font-size: 15px;">Please use the following 6-digit verification code to complete your signup:</p>
+          <div style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #ec4899; background: rgba(255,255,255,0.05); padding: 12px 20px; border-radius: 8px; display: inline-block; margin: 16px 0;">
+            ${otpCode}
+          </div>
+          <p style="color: #94a3b8; font-size: 13px;">This code is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+        </div>
+      `,
+    });
+    return { sent: true };
+  } catch (err) {
+    console.warn('[Email Transporter Notice]:', err.message);
+    return { sent: false, error: err.message };
+  }
+}
+
+// ─── Step 1: Send OTP to Email ──────────────────────────────────────────────
+router.post('/send-otp', async (req, res) => {
+  const { email } = req.body || {};
+
+  if (!email || !EMAIL_RE.test(email)) {
+    return res.status(400).json({ error: 'A valid email address is required' });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  try {
+    const existing = await db.queryGet('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    if (existing) {
+      return res.status(409).json({ error: 'An account with this email already exists' });
+    }
+
+    // Generate random 6-digit numeric OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpId = randomUUID();
+
+    // 10-minute expiry timestamp
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+    // Clean up old OTPs for this email
+    await db.queryRun('DELETE FROM verification_otps WHERE email = ?', [normalizedEmail]);
+
+    // Store in DB
+    await db.queryRun(
+      'INSERT INTO verification_otps (id, email, otp_code, expires_at) VALUES (?, ?, ?, ?)',
+      [otpId, normalizedEmail, otpCode, expiresAt]
+    );
+
+    // Send email (or log to server console)
+    const emailResult = await sendOtpEmail(normalizedEmail, otpCode);
+
+    res.json({
+      ok: true,
+      message: 'Verification code sent to your email.',
+      expiresInMinutes: 10,
+      devMode: emailResult.devMode || false,
+      devOtp: emailResult.devMode ? otpCode : undefined, // Provided in dev mode when SMTP not configured
+    });
+  } catch (err) {
+    console.error('Send OTP failed:', err);
+    res.status(500).json({ error: 'Failed to send verification code' });
+  }
+});
+
+// ─── Step 2: Verify OTP and Complete Registration ───────────────────────────
+router.post('/verify-otp-register', async (req, res) => {
+  try {
+    const { email, otp, password, name, username } = req.body || {};
+
+    if (!email || !otp || !password || !name) {
+      return res.status(400).json({ error: 'Email, verification code, password, and name are required' });
+    }
+    if (!EMAIL_RE.test(email)) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+    }
+    if (!name.trim() || name.length > 50) {
+      return res.status(400).json({ error: 'Name must be between 1 and 50 characters' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const cleanOtp = String(otp).trim();
+
+    // 1. Verify OTP in database
+    const otpRecord = await db.queryGet(
+      'SELECT id, expires_at FROM verification_otps WHERE email = ? AND otp_code = ?',
+      [normalizedEmail, cleanOtp]
+    );
+
+    if (!otpRecord) {
+      return res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
+    }
+
+    const isExpired = new Date(otpRecord.expires_at).getTime() < Date.now();
+    if (isExpired) {
+      await db.queryRun('DELETE FROM verification_otps WHERE id = ?', [otpRecord.id]);
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
+    }
+
+    // 2. Check if email exists
+    const existing = await db.queryGet('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    if (existing) {
+      return res.status(409).json({ error: 'An account with this email already exists' });
+    }
+
+    let assignedUsername = (username && username.trim()) ? username.trim().toLowerCase() : normalizedEmail.split('@')[0];
+    const usernameTaken = await db.queryGet('SELECT id FROM users WHERE LOWER(username) = ?', [assignedUsername]);
+    if (usernameTaken) {
+      assignedUsername = `${assignedUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+
+    const assignedRole = normalizedEmail === ADMIN_EMAIL ? 'admin' : 'user';
+    const passwordHash = await bcrypt.hash(password, 12);
+    const id = randomUUID();
+
+    await db.queryRun(
+      'INSERT INTO users (id, email, password_hash, name, username, role) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, normalizedEmail, passwordHash, name.trim(), assignedUsername, assignedRole]
+    );
+
+    // Delete verified OTP record
+    await db.queryRun('DELETE FROM verification_otps WHERE email = ?', [normalizedEmail]);
+
+    const user = { id, email: normalizedEmail, name: name.trim(), username: assignedUsername, role: assignedRole };
+    const accessToken = signAccessToken(user);
+    const refreshToken = signRefreshToken(user);
+
+    res.status(201).json({ token: accessToken, refreshToken, user });
+  } catch (err) {
+    console.error('Verify OTP register failed:', err);
+    res.status(500).json({ error: 'Registration failed: ' + err.message });
+  }
+});
+
+// Legacy direct registration endpoint (preserved for backwards compatibility)
 router.post('/register', async (req, res) => {
   try {
     const { email, password, name, username } = req.body || {};
@@ -81,6 +266,7 @@ router.post('/register', async (req, res) => {
     res.status(500).json({ error: 'Registration failed' });
   }
 });
+
 
 router.post('/login', async (req, res) => {
   try {
