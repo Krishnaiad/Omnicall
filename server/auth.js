@@ -407,10 +407,21 @@ router.put('/profile', requireAuth, async (req, res) => {
   }
 });
 
+let usersCache = null;
+let usersCacheTime = 0;
+export const invalidateUsersCache = () => { usersCache = null; };
+
+
 // Registered Accounts Directory Endpoint (Available to all logged-in team members)
 router.get('/users', requireAuth, async (req, res) => {
   try {
+    const now = Date.now();
+    if (usersCache && (now - usersCacheTime < 30000)) {
+      return res.json({ users: usersCache });
+    }
     const users = await db.queryAll('SELECT id, name, username, email, role, created_at FROM users ORDER BY created_at DESC');
+    usersCache = users;
+    usersCacheTime = now;
     res.json({ users });
   } catch (err) {
     console.error('List users failed:', err);
@@ -421,6 +432,7 @@ router.get('/users', requireAuth, async (req, res) => {
 // Admin Delete Normal User Endpoint (Admin Only)
 router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res) => {
   const { userId } = req.params;
+
 
   if (userId === req.user.id) {
     return res.status(400).json({ error: 'Admins cannot delete their own account.' });

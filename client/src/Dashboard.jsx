@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from './api.js';
-import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive, Image as ImageIcon, Download, Search, CheckCircle2, Sparkles, Camera } from 'lucide-react';
+import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive, Image as ImageIcon, Download, Search, CheckCircle2, Sparkles, Camera, Eye } from 'lucide-react';
 
 export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpdate }) {
   const [rooms, setRooms] = useState([]);
@@ -33,9 +33,12 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
   const [profileModalError, setProfileModalError] = useState('');
   const [profileModalSuccess, setProfileModalSuccess] = useState('');
 
+  // Media Preview Modal State
+  const [selectedMediaPreview, setSelectedMediaPreview] = useState(null);
 
   // Fullscreen Memory View Modal State
   const [selectedMemoryView, setSelectedMemoryView] = useState(null);
+
 
   // Join Call Nickname Modal State
   const [joiningRoom, setJoiningRoom] = useState(null);
@@ -449,15 +452,27 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
         </div>
       </div>
 
-      {/* Notifications */}
-      {inviteNotice && (
-        <div className="error-banner" style={{ background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(236, 72, 153, 0.9))', color: '#fff', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px' }}>
-          <Bell size={18} /> {inviteNotice}
+      {/* Floating Notifications Toast Container */}
+      {(inviteNotice || error || success) && (
+        <div style={{ position: 'fixed', top: '24px', right: '24px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '400px', width: 'calc(100% - 48px)' }}>
+          {inviteNotice && (
+            <div className="glass-card" style={{ padding: '12px 16px', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.95), rgba(236, 72, 153, 0.95))', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)' }}>
+              <Bell size={18} /> <span>{inviteNotice}</span>
+            </div>
+          )}
+          {error && (
+            <div className="glass-card" style={{ padding: '12px 16px', background: 'rgba(239, 68, 68, 0.95)', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)' }}>
+              <AlertTriangle size={18} /> <span>{error}</span>
+            </div>
+          )}
+          {success && (
+            <div className="glass-card" style={{ padding: '12px 16px', background: 'rgba(16, 185, 129, 0.95)', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)' }}>
+              <CheckCircle2 size={18} /> <span>{success}</span>
+            </div>
+          )}
         </div>
       )}
 
-      {error && <div className="error-banner" style={{ marginBottom: '20px', borderRadius: '12px' }}>{error}</div>}
-      {success && <div className="error-banner" style={{ background: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.4)', color: '#6ee7b7', marginBottom: '20px', borderRadius: '12px' }}>{success}</div>}
 
       {/* Main Grid: Video Rooms + Media Injector */}
       <div className="dash-sections">
@@ -633,8 +648,24 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
               {clips.map((clip) => {
                 const isCloudinary = clip.storageProvider === 'cloudinary';
                 return (
-                  <div key={clip.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                    <div style={{ overflow: 'hidden', marginRight: '8px' }}>
+                  <div
+                    key={clip.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <div
+                      style={{ overflow: 'hidden', marginRight: '8px', cursor: 'pointer', flex: 1 }}
+                      onClick={() => setSelectedMediaPreview(clip)}
+                      title="Click to preview file"
+                    >
                       <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {clip.name}
                         {isCloudinary && (
@@ -643,19 +674,36 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>{clip.mimeType} • {clip.status}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#a5b4fc', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Eye size={12} /> Click to Preview • {clip.mimeType}
+                      </div>
                     </div>
 
-                    <button
-                      className="btn-outline"
-                      onClick={() => handleDeleteClip(clip.id)}
-                      style={{ padding: '4px 8px', borderRadius: '6px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button
+                        className="btn-outline"
+                        onClick={() => setSelectedMediaPreview(clip)}
+                        title="Preview Media"
+                        style={{ padding: '5px 8px', borderRadius: '6px', color: '#818cf8', borderColor: 'rgba(99, 102, 241, 0.4)' }}
+                      >
+                        <Eye size={13} />
+                      </button>
+                      <button
+                        className="btn-outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteClip(clip.id);
+                        }}
+                        style={{ padding: '5px 8px', borderRadius: '6px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                        title="Delete Clip"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
+
             </div>
           )}
         </div>
@@ -916,6 +964,76 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
           </div>
         </div>
       )}
+
+      {/* Media Preview Lightbox Modal */}
+      {selectedMediaPreview && (
+
+        <div className="modal-backdrop" style={{ zIndex: 1200 }} onClick={() => setSelectedMediaPreview(null)}>
+          <div className="glass-card modal-box" style={{ maxWidth: '850px', width: '92vw', padding: '20px', borderRadius: '16px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div style={{ fontWeight: 700, color: '#fff', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Film size={18} color="#ec4899" /> {selectedMediaPreview.name}
+              </div>
+              <button onClick={() => setSelectedMediaPreview(null)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ background: '#050811', borderRadius: '10px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', maxHeight: '65vh', padding: '8px' }}>
+              {selectedMediaPreview.mimeType?.startsWith('image/') ? (
+                <img
+                  src={selectedMediaPreview.publicUrl || api.getStreamUrl(token, selectedMediaPreview.id)}
+                  alt={selectedMediaPreview.name}
+                  style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '8px' }}
+                />
+              ) : selectedMediaPreview.mimeType?.startsWith('video/') ? (
+                <video
+                  src={selectedMediaPreview.publicUrl || api.getStreamUrl(token, selectedMediaPreview.id)}
+                  controls
+                  autoPlay
+                  style={{ maxWidth: '100%', maxHeight: '60vh', borderRadius: '8px' }}
+                />
+              ) : (
+                <audio
+                  src={selectedMediaPreview.publicUrl || api.getStreamUrl(token, selectedMediaPreview.id)}
+                  controls
+                  autoPlay
+                  style={{ width: '100%', padding: '20px' }}
+                />
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', flexWrap: 'wrap', gap: '8px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                {selectedMediaPreview.mimeType} • {selectedMediaPreview.storageProvider?.toUpperCase()}
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <a
+                  href={selectedMediaPreview.publicUrl || api.getStreamUrl(token, selectedMediaPreview.id)}
+                  download={selectedMediaPreview.name}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-primary"
+                  style={{ width: 'auto', padding: '6px 14px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Download size={14} /> Download File
+                </a>
+                <button
+                  className="btn-outline"
+                  onClick={() => {
+                    handleDeleteClip(selectedMediaPreview.id);
+                    setSelectedMediaPreview(null);
+                  }}
+                  style={{ padding: '6px 12px', fontSize: '0.8rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.4)' }}
+                >
+                  <Trash2 size={14} /> Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Custom Delete Room Modal */}
       {deletingRoomTarget && (

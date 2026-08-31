@@ -1,42 +1,78 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
-import { Film, Play, StopCircle, X, Monitor, Image as ImageIcon } from 'lucide-react';
+import { Film, Play, StopCircle, X, Monitor, Upload, Cloud, AlertCircle, Sparkles } from 'lucide-react';
 import { LocalVideoTrack } from 'livekit-client';
 
 export default function MediaInjector({ token, room, onClose, onActiveStateChange, onSharePresentation }) {
   const [clips, setClips] = useState([]);
   const [activeTileMediaId, setActiveTileMediaId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
 
-  useEffect(() => {
-    async function loadClips() {
-      try {
-        const data = await api.listClips(token);
-        setClips((data.clips || []).filter((c) => c.status === 'ready'));
-      } catch (err) {
-        console.error('Failed to load server clips:', err);
-      } finally {
-        setLoading(false);
-      }
+  const loadClips = async () => {
+    try {
+      const data = await api.listClips(token);
+      setClips((data.clips || []).filter((c) => c.status === 'ready'));
+    } catch (err) {
+      console.error('Failed to load server clips:', err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadClips();
   }, [token]);
+
+  // Direct In-Call File Upload
+  const handleInCallUpload = async (e) => {
+    e.preventDefault();
+    if (!selectedFile) return;
+    setUploading(true);
+    setError('');
+    setSuccess('');
+
+    const formData = new FormData();
+    formData.append('clip', selectedFile);
+
+    try {
+      const res = await api.uploadClip(token, formData);
+      setSelectedFile(null);
+      setSuccess('Uploaded! Sharing to call stage...');
+      await loadClips();
+      
+      // Auto-broadcast the newly uploaded file to the presentation stage
+      if (res.file) {
+        const streamUrl = res.file.publicUrl || api.getStreamUrl(token, res.file.id);
+        if (onSharePresentation) {
+          onSharePresentation(streamUrl, res.file.name, res.file.mimeType);
+        }
+      }
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // Option A: Tile Stream Injection (Image, Video, Audio)
   const handleTileStream = async (clip) => {
     if (!room) return;
     const isImage = clip.mimeType.startsWith('image/');
-    const streamUrl = api.getStreamUrl(token, clip.id);
+    const streamUrl = clip.publicUrl || api.getStreamUrl(token, clip.id);
 
     try {
       let streamTrack = null;
 
       if (isImage) {
-        // Image Canvas Stream Injection
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.src = streamUrl;
@@ -51,7 +87,6 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
         const canvasStream = canvas.captureStream ? canvas.captureStream(30) : canvas.mozCaptureStream(30);
         streamTrack = canvasStream.getVideoTracks()[0];
       } else {
-        // Video Stream Injection
         const videoEl = videoRef.current;
         videoEl.crossOrigin = 'anonymous';
         videoEl.src = streamUrl;
@@ -101,38 +136,68 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
 
   // Option B: Shared Presentation Stage Broadcast
   const handleSharePresentation = (clip) => {
-    const streamUrl = api.getStreamUrl(token, clip.id);
+    const streamUrl = clip.publicUrl || api.getStreamUrl(token, clip.id);
     if (onSharePresentation) {
       onSharePresentation(streamUrl, clip.name, clip.mimeType);
     }
   };
 
   return (
-    <div className="glass-card injector-popover" style={{ width: '400px' }}>
+    <div className="glass-card injector-popover" style={{ width: '420px', maxWidth: '92vw', padding: '16px' }}>
       {/* Hidden media elements for canvas/stream capture */}
       <video ref={videoRef} style={{ display: 'none' }} playsInline muted />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       <img ref={imageRef} style={{ display: 'none' }} alt="" />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
-          <Film size={18} color="#ec4899" /> Media Library Injector
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#f472b6', fontSize: '1rem' }}>
+          <Film size={18} color="#ec4899" /> Media & Presentation Stage
         </div>
         <button onClick={onClose} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
           <X size={18} />
         </button>
       </div>
 
-      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-        Select any uploaded Image, Video, or Audio to <strong>Tile Stream</strong> (video grid) or <strong>Share to Presentation Stage</strong> (high-res stage for everyone).
+      {/* In-Call Direct File Upload Box */}
+      <form onSubmit={handleInCallUpload} style={{ padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(236,72,153,0.3)', marginBottom: '14px' }}>
+        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f472b6', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <Upload size={13} /> Upload & Share New File Right Now:
+        </div>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mp3"
+            className="form-control"
+            style={{ fontSize: '0.75rem', padding: '5px 8px', flex: 1, borderRadius: '6px' }}
+            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+          />
+          <button
+            type="submit"
+            disabled={!selectedFile || uploading}
+            className="btn-primary"
+            style={{ width: 'auto', padding: '5px 12px', fontSize: '0.75rem', borderRadius: '6px', background: 'linear-gradient(135deg, #ec4899, #818cf8)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+          >
+            {uploading ? 'Uploading...' : 'Present'}
+          </button>
+        </div>
+        {error && <div style={{ fontSize: '0.7rem', color: '#f87171', marginTop: '6px' }}>{error}</div>}
+        {success && <div style={{ fontSize: '0.7rem', color: '#6ee7b7', marginTop: '6px' }}>{success}</div>}
+      </form>
+
+      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
+        Or select a previously uploaded file:
       </p>
 
       {loading ? (
-        <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Loading media library...</p>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Loading media files...</p>
       ) : clips.length === 0 ? (
-        <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>No media files found in your library. Upload images/videos in the dashboard.</p>
+        <div style={{ padding: '14px', textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.1)' }}>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+            No previous files in library. Use the upload box above to present any file instantly!
+          </p>
+        </div>
       ) : (
-        <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {clips.map((clip) => {
             const isPlayingInTile = activeTileMediaId === clip.id;
             return (
@@ -142,24 +207,24 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '6px',
-                  padding: '10px',
+                  padding: '8px 10px',
                   borderRadius: '8px',
-                  background: isPlayingInTile ? 'rgba(236, 72, 153, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  background: isPlayingInTile ? 'rgba(236, 72, 153, 0.2)' : 'rgba(255, 255, 255, 0.04)',
                   border: isPlayingInTile ? '1px solid rgba(236, 72, 153, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
                 }}
               >
-                <div style={{ fontSize: '0.8125rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#fff' }}>
                   {clip.name} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>({clip.mimeType})</span>
                 </div>
 
                 <div style={{ display: 'flex', gap: '6px' }}>
                   {isPlayingInTile ? (
                     <button className="btn-outline" onClick={handleStopTileStream} style={{ flex: 1, padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', color: '#f472b6' }}>
-                      <StopCircle size={14} /> Stop Tile Stream
+                      <StopCircle size={13} /> Stop Tile
                     </button>
                   ) : (
                     <button className="btn-outline" onClick={() => handleTileStream(clip)} style={{ flex: 1, padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                      <Play size={14} /> Tile Stream
+                      <Play size={13} /> Tile Stream
                     </button>
                   )}
 
@@ -168,7 +233,7 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
                     onClick={() => handleSharePresentation(clip)}
                     style={{ flex: 1, padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', background: 'linear-gradient(135deg, #ec4899, #818cf8)' }}
                   >
-                    <Monitor size={14} /> Presentation Stage
+                    <Monitor size={13} /> Present Stage
                   </button>
                 </div>
               </div>
