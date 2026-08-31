@@ -1,4 +1,5 @@
-const BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
+const BASE_URL = (import.meta.env.VITE_SERVER_URL || 'https://omnicall-api.onrender.com').replace(/\/+$/, '');
+
 
 let isRefreshing = false;
 let refreshSubscribers = [];
