@@ -33,9 +33,15 @@ export default class ErrorBoundary extends React.Component {
               <AlertTriangle size={36} color="#ef4444" />
             </div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '8px', color: '#fff' }}>Something went wrong</h2>
-            <p style={{ fontSize: '0.85rem', color: '#9ca3af', marginBottom: '24px', lineHeight: 1.5 }}>
+            <p style={{ fontSize: '0.85rem', color: '#9ca3af', marginBottom: '16px', lineHeight: 1.5 }}>
               The application encountered a temporary display issue. Tap below to reload or reset your session cleanly.
             </p>
+            {this.state.error?.message && (
+              <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', color: '#fca5a5', fontSize: '0.75rem', marginBottom: '20px', wordBreak: 'break-word' }}>
+                {this.state.error.message}
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button
                 type="button"

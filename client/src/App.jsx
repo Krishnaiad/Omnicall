@@ -31,6 +31,20 @@ export default function App() {
     return null;
   });
 
+  // Auto-validate session on boot. If user was deleted or token expired, cleanly return to login
+  useEffect(() => {
+    if (token) {
+      fetch(`${api.BASE_URL}/api/rooms`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).then((res) => {
+        if (res.status === 401) {
+          handleLogout();
+        }
+      }).catch(() => {});
+    }
+  }, [token]);
+
+
   const handleAuthSuccess = (newToken, newUser, refreshToken) => {
     setToken(newToken);
     setUser(newUser);
