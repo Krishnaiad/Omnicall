@@ -367,19 +367,25 @@ router.put('/profile', requireAuth, async (req, res) => {
   }
 
   try {
-    const existing = await db.queryGet(
-      'SELECT id FROM users WHERE LOWER(username) = ? AND id != ?',
-      [cleanUsername, req.user.id]
-    );
+    const currentUser = await db.queryGet('SELECT id, username FROM users WHERE id = ?', [req.user.id]);
+    
+    // Only check collision if user is actually changing to a new username
+    if (!currentUser || currentUser.username.toLowerCase() !== cleanUsername) {
+      const existing = await db.queryGet(
+        'SELECT id FROM users WHERE LOWER(username) = ? AND id != ?',
+        [cleanUsername, req.user.id]
+      );
 
-    if (existing) {
-      return res.status(409).json({ error: `Username "@${cleanUsername}" is already taken. Please choose another username.` });
+      if (existing) {
+        return res.status(409).json({ error: `Username "@${cleanUsername}" is already taken. Please choose another username.` });
+      }
     }
 
     await db.queryRun(
       'UPDATE users SET name = ?, username = ? WHERE id = ?',
       [cleanName, cleanUsername, req.user.id]
     );
+
 
     const updatedUser = {
       id: req.user.id,

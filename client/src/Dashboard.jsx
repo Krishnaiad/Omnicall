@@ -27,9 +27,12 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
 
   // Profile Modal State
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [editName, setEditName] = useState(user.name || '');
-  const [editUsername, setEditUsername] = useState(user.username || '');
+  const [editName, setEditName] = useState(user?.name || '');
+  const [editUsername, setEditUsername] = useState(user?.username || '');
   const [savingProfile, setSavingProfile] = useState(false);
+  const [profileModalError, setProfileModalError] = useState('');
+  const [profileModalSuccess, setProfileModalSuccess] = useState('');
+
 
   // Fullscreen Memory View Modal State
   const [selectedMemoryView, setSelectedMemoryView] = useState(null);
@@ -178,12 +181,35 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
     fetchAdminUsers();
   };
 
+  const handleOpenProfileModal = () => {
+    setEditName(user?.name || '');
+    setEditUsername(user?.username || '');
+    setProfileModalError('');
+    setProfileModalSuccess('');
+    setShowProfileModal(true);
+  };
+
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     if (!editName.trim() || !editUsername.trim()) return;
+
+    const cleanName = editName.trim();
+    const cleanUsername = editUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const currentName = (user?.name || '').trim();
+    const currentUsername = (user?.username || '').trim().toLowerCase();
+
+    setProfileModalError('');
+    setProfileModalSuccess('');
+
+    // If nothing changed, confirm saved immediately without redundant API call
+    if (cleanName === currentName && cleanUsername === currentUsername) {
+      setProfileModalSuccess('Saved (no changes made).');
+      setSuccess('Profile saved (no changes).');
+      setTimeout(() => setShowProfileModal(false), 900);
+      return;
+    }
+
     setSavingProfile(true);
-    setError('');
-    setSuccess('');
     try {
       const res = await fetch(`${api.BASE_URL}/api/auth/profile`, {
         method: 'PUT',
@@ -191,20 +217,22 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ name: editName.trim(), username: editUsername.trim() }),
+        body: JSON.stringify({ name: cleanName, username: cleanUsername }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update profile');
 
-      setSuccess(`✅ Profile updated to @${data.user.username} successfully!`);
+      setProfileModalSuccess(`✅ Changes saved successfully! Updated to @${data.user.username}`);
+      setSuccess(`✅ Changes saved successfully! Updated to @${data.user.username}`);
       if (onUserUpdate) onUserUpdate(data.user, data.token, data.refreshToken);
-      setShowProfileModal(false);
+      setTimeout(() => setShowProfileModal(false), 1100);
     } catch (err) {
-      setError(err.message);
+      setProfileModalError(err.message);
     } finally {
       setSavingProfile(false);
     }
   };
+
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
@@ -378,11 +406,12 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
 
           <button
             className="btn-outline"
-            onClick={() => setShowProfileModal(true)}
+            onClick={handleOpenProfileModal}
             style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'rgba(99, 102, 241, 0.4)', color: '#a5b4fc' }}
           >
-            <UserCheck size={15} /> Profile (@{user.username || 'user'})
+            <UserCheck size={15} /> Profile (@{user?.username || 'user'})
           </button>
+
 
           <button className="btn-outline" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'rgba(239,68,68,0.3)', color: '#fca5a5' }}>
             <LogOut size={15} /> Logout
@@ -713,8 +742,20 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
             </div>
 
             <form onSubmit={handleSaveProfile}>
+              {profileModalError && (
+                <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: '8px', color: '#fca5a5', fontSize: '0.8125rem', marginBottom: '14px' }}>
+                  {profileModalError}
+                </div>
+              )}
+              {profileModalSuccess && (
+                <div style={{ padding: '8px 12px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: '8px', color: '#6ee7b7', fontSize: '0.8125rem', marginBottom: '14px' }}>
+                  {profileModalSuccess}
+                </div>
+              )}
+
               <div style={{ marginBottom: '14px' }}>
                 <label style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Full Display Name</label>
+
                 <input
                   className="form-control"
                   value={editName}
