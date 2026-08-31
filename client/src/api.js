@@ -314,6 +314,13 @@ export const api = {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     }),
+
+  deleteUser: (token, userId) =>
+    request(`/api/auth/users/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
 };
+
 
 

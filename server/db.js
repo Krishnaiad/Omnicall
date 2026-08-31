@@ -15,10 +15,11 @@ export function randomUUID() {
   });
 }
 
-const DATABASE_URL = process.env.DATABASE_URL;
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres.uwruxjmzwroxcvctsqyg:Joshiji%4012iisc@aws-0-ap-south-1.pooler.supabase.com:5432/postgres';
 let isPg = false;
 let pool = null;
 let sqliteDb = null;
+
 
 if (DATABASE_URL) {
   isPg = true;

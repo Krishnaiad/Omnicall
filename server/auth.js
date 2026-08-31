@@ -412,5 +412,42 @@ router.get('/users', requireAuth, async (req, res) => {
   }
 });
 
+// Admin Delete Normal User Endpoint (Admin Only)
+router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+
+  if (userId === req.user.id) {
+    return res.status(400).json({ error: 'Admins cannot delete their own account.' });
+  }
+
+  try {
+    const target = await db.queryGet('SELECT id, role, username FROM users WHERE id = ?', [userId]);
+    if (!target) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (target.role === 'admin') {
+      return res.status(403).json({ error: 'Cannot delete an admin account.' });
+    }
+
+    // Clean up all related records
+    await db.queryRun('DELETE FROM room_memories WHERE user_id = ?', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM media_files WHERE user_id = ?', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM room_members WHERE user_id = ?', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM chat_messages WHERE sender_id = ?', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM hand_raises WHERE user_id = ?', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM poll_votes WHERE user_id = ?', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM live_sessions WHERE user_id = ?', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM rooms WHERE owner_id = ?', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM users WHERE id = ?', [userId]);
+
+    res.json({ ok: true, message: `User @${target.username} has been deleted permanently.` });
+  } catch (err) {
+    console.error('Delete user failed:', err);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+
 
 export default router;

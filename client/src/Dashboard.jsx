@@ -95,6 +95,22 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
     }
   };
 
+  const handleAdminDeleteUser = async (targetUser) => {
+    if (!window.confirm(`Are you sure you want to delete user @${targetUser.username || targetUser.name}? All their rooms and files will be removed.`)) {
+      return;
+    }
+    setError('');
+    setSuccess('');
+    try {
+      await api.deleteUser(token, targetUser.id);
+      setAdminUsersList((prev) => prev.filter((u) => u.id !== targetUser.id));
+      setSuccess(`User @${targetUser.username || targetUser.name} deleted successfully.`);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+
 
   useEffect(() => {
     fetchRooms();
@@ -771,6 +787,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
                       <th style={{ padding: '8px' }}>Name</th>
                       <th style={{ padding: '8px' }}>Username / Email</th>
                       <th style={{ padding: '8px' }}>Role</th>
+                      {isAdmin && <th style={{ padding: '8px', textAlign: 'right' }}>Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -793,10 +810,35 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
                               {u.role}
                             </span>
                           </td>
+                          {isAdmin && (
+                            <td style={{ padding: '8px', textAlign: 'right' }}>
+                              {u.role !== 'admin' && (
+                                <button
+                                  className="btn-outline"
+                                  onClick={() => handleAdminDeleteUser(u)}
+                                  title={`Delete user @${u.username}`}
+                                  style={{
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    color: '#ef4444',
+                                    borderColor: 'rgba(239, 68, 68, 0.4)',
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                  }}
+                                >
+                                  <Trash2 size={12} /> Delete
+                                </button>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       ))}
                   </tbody>
                 </table>
+
               </div>
             )}
           </div>
