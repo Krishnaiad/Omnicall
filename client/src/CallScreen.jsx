@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Room, RoomEvent, Track, LocalVideoTrack } from 'livekit-client';
-import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check, UserPlus, Pin, PinOff } from 'lucide-react';
+import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check, UserPlus, Pin, PinOff, Tv, Zap, ZapOff, Volume2 } from 'lucide-react';
 import MediaInjector from './MediaInjector.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import EffectsPicker, { VIDEO_FILTERS, VIRTUAL_BACKGROUNDS } from './EffectsPicker.jsx';
@@ -8,7 +8,7 @@ import PresentationStage from './PresentationStage.jsx';
 import InCallInviteModal from './InCallInviteModal.jsx';
 import { captureRoomSnapshot } from './snapshotUtils.js';
 
-function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin }) {
+function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin, isSpeaking, isDataSaver }) {
   const elRef = useRef(null);
 
   useEffect(() => {
@@ -24,8 +24,9 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin }) {
     return <audio ref={elRef} autoPlay />;
   }
 
-  const filterObj = item.isLocal ? VIDEO_FILTERS.find((f) => f.id === activeFilter) : null;
-  const bgObj = item.isLocal ? VIRTUAL_BACKGROUNDS.find((b) => b.id === activeBg) : null;
+  // If Data Saver is active, bypass heavy CSS filters to save mobile CPU & battery
+  const filterObj = (!isDataSaver && item.isLocal) ? VIDEO_FILTERS.find((f) => f.id === activeFilter) : null;
+  const bgObj = (!isDataSaver && item.isLocal) ? VIRTUAL_BACKGROUNDS.find((b) => b.id === activeBg) : null;
   
   const displayLabel = item.name || (item.identity.includes('_') ? item.identity.split('_').slice(1).join('_') : item.identity);
 
@@ -64,7 +65,7 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin }) {
 
   return (
     <div
-      className={`video-tile ${isPinned ? 'pinned-tile' : ''}`}
+      className={`video-tile ${isPinned ? 'pinned-tile' : ''} ${isSpeaking ? 'speaking-active' : ''}`}
       style={containerStyle}
       onDoubleClick={onTogglePin}
       title="Double-click to Spotlight / Pin to Max View"
@@ -77,9 +78,14 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin }) {
         style={videoStyle}
       />
       <div className="tile-overlay" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ fontWeight: 600 }}>{displayLabel}</span>
-          {item.isLocal && <span style={{ opacity: 0.7, marginLeft: '4px' }}>(you)</span>}
+          {item.isLocal && <span style={{ opacity: 0.7 }}>(you)</span>}
+          {isSpeaking && (
+            <span className="speaking-badge" title="Actively speaking">
+              <Volume2 size={11} /> Speaking
+            </span>
+          )}
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
@@ -98,6 +104,13 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [displayName, setDisplayName] = useState(initialDisplayName || user.name);
+
+  // Active Speakers State (Point 7 Feature)
+  const [speakingIdentities, setSpeakingIdentities] = useState(new Set());
+
+  // Data-Saver Low-Bandwidth Mode
+  const [dataSaverMode, setDataSaverMode] = useState(false);
+
 
   // Shared Presentation Stage state
   const [sharedMedia, setSharedMedia] = useState(null);
@@ -279,7 +292,13 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         prev.map((t) => (t.identity === participant.identity ? { ...t, name } : t))
       );
     });
+
+    // ── Active Speaker Detection (Feature 7: Glow Ring) ────────────────────────
+    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      setSpeakingIdentities(new Set(speakers.map((s) => s.identity)));
+    });
     // ─────────────────────────────────────────────────────────────────────────
+
 
     async function connect() {
       try {
@@ -447,6 +466,36 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     onLeave();
   };
 
+  // Picture-in-Picture (PiP) Mode Handler
+  const togglePiP = async () => {
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        return;
+      }
+      // Target spotlighted pinned video, or active speaker, or first visible video tile
+      const videoEl =
+        document.querySelector('.pinned-tile video') ||
+        document.querySelector('.video-tile.speaking-active video') ||
+        document.querySelector('.video-tile video');
+
+      if (videoEl) {
+        if (videoEl.requestPictureInPicture) {
+          await videoEl.requestPictureInPicture();
+        } else if (videoEl.webkitSetPresentationMode) {
+          videoEl.webkitSetPresentationMode('picture-in-picture');
+        }
+      } else {
+        setToastNotice('⚠️ No active video available for Picture-in-Picture mode.');
+        setTimeout(() => setToastNotice(null), 3000);
+      }
+    } catch (err) {
+      console.warn('PiP notice:', err.message);
+      setToastNotice(`PiP notice: ${err.message}`);
+      setTimeout(() => setToastNotice(null), 3000);
+    }
+  };
+
   const videoTracks = tracks.filter((t) => t.kind === Track.Kind.Video);
   const audioTracks = tracks.filter((t) => t.kind === Track.Kind.Audio);
   const isPresenter = sharedMedia && sharedMedia.presenterName === displayName;
@@ -459,8 +508,35 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       <header className="call-header">
         <div style={{ fontWeight: 700, fontSize: 'clamp(0.95rem, 2vw, 1.15rem)', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ color: '#a5b4fc' }}>Room:</span> {roomData.name}
+          {dataSaverMode && <span className="data-saver-tag">🌿 Data Saver ON</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Data Saver Mode Toggle Button */}
+          <button
+            className="btn-outline"
+            style={{
+              padding: '5px 10px',
+              fontSize: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              borderRadius: '8px',
+              borderColor: dataSaverMode ? '#10b981' : undefined,
+              color: dataSaverMode ? '#34d399' : undefined,
+              background: dataSaverMode ? 'rgba(16,185,129,0.15)' : undefined,
+            }}
+            onClick={() => {
+              const nextState = !dataSaverMode;
+              setDataSaverMode(nextState);
+              setToastNotice(nextState ? '🌿 Data Saver enabled: Video filters bypassed to save mobile data & CPU.' : '⚡ Full Quality Mode restored.');
+              setTimeout(() => setToastNotice(null), 3000);
+            }}
+            title="Toggle Data Saver Mode (drops filter overhead for weak/mobile networks)"
+          >
+            {dataSaverMode ? <ZapOff size={12} color="#34d399" /> : <Zap size={12} />}
+            {dataSaverMode ? 'Data Saver ON' : 'Data Saver'}
+          </button>
+
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
             Speaking as: <strong style={{ color: '#818cf8', fontWeight: 600 }}>{displayName}</strong>
           </span>
@@ -499,6 +575,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
                   activeBg={activeBg}
                   isPinned={true}
                   onTogglePin={() => setPinnedTrackSid(null)}
+                  isSpeaking={speakingIdentities.has(pinnedTrack.identity)}
+                  isDataSaver={dataSaverMode}
                 />
               </div>
             </div>
@@ -514,6 +592,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
                 activeBg={activeBg}
                 isPinned={false}
                 onTogglePin={() => setPinnedTrackSid(item.sid)}
+                isSpeaking={speakingIdentities.has(item.identity)}
+                isDataSaver={dataSaverMode}
               />
             ))}
           </div>
@@ -590,6 +670,15 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           <Monitor size={20} />
         </button>
 
+        {/* Picture-in-Picture (Floating Player) */}
+        <button
+          className="control-btn"
+          onClick={togglePiP}
+          title="Picture-in-Picture (Floating Mini Video Window)"
+        >
+          <Tv size={20} />
+        </button>
+
         <button
           className={`control-btn ${showEffects ? 'active' : ''}`}
           onClick={() => setShowEffects((prev) => !prev)}
@@ -648,6 +737,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           <PhoneOff size={20} />
         </button>
       </footer>
+
 
       {requestSentNotice && (
         <div className="snapshot-toast-banner" style={{ background: 'linear-gradient(135deg, #6366f1, #818cf8)' }}>
