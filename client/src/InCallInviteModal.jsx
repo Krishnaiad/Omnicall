@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { UserPlus, Search, X, Check, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { UserPlus, Search, X, Check, Loader2, Link as LinkIcon, Copy } from 'lucide-react';
 import { api } from './api.js';
 
 export default function InCallInviteModal({ token, roomId, roomName, onClose }) {
@@ -8,6 +8,31 @@ export default function InCallInviteModal({ token, roomId, roomName, onClose }) 
   const [searching, setSearching] = useState(false);
   const [invitedUsers, setInvitedUsers] = useState(new Set());
   const [error, setError] = useState(null);
+  const [shareableUrl, setShareableUrl] = useState('');
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  useEffect(() => {
+    const fetchLink = async () => {
+      try {
+        const data = await api.getInviteLink(token, roomId);
+        if (data.inviteToken) {
+          const fullUrl = `${window.location.origin}/join/${data.inviteToken}`;
+          setShareableUrl(fullUrl);
+        }
+      } catch (err) {
+        console.warn('Could not generate shareable link:', err.message);
+      }
+    };
+    fetchLink();
+  }, [token, roomId]);
+
+  const handleCopyLink = () => {
+    if (!shareableUrl) return;
+    navigator.clipboard.writeText(shareableUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 3000);
+  };
+
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -48,7 +73,37 @@ export default function InCallInviteModal({ token, roomId, roomName, onClose }) 
           </button>
         </div>
 
+        {/* 1-Click Shareable Guest Invite Link */}
+        {shareableUrl && (
+          <div style={{ marginBottom: '16px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '10px', padding: '12px' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#a5b4fc', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <LinkIcon size={13} /> 1-Click Shareable Guest Link
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <input
+                readOnly
+                value={shareableUrl}
+                style={{ flex: 1, fontSize: '0.75rem', padding: '6px 10px', borderRadius: '6px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+              />
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="btn-primary"
+                style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+              >
+                {copiedLink ? <Check size={14} /> : <Copy size={14} />}
+                {copiedLink ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Or Search Registered Users:
+        </div>
+
         <form onSubmit={handleSearch} style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+
           <div style={{ flex: 1, position: 'relative' }}>
             <input
               className="form-control"

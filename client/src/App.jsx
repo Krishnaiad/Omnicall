@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AuthScreen from './AuthScreen.jsx';
 import Dashboard from './Dashboard.jsx';
 import CallScreen from './CallScreen.jsx';
+import GuestJoinLobby from './GuestJoinLobby.jsx';
 import { api } from './api.js';
 
 export default function App() {
@@ -20,6 +21,15 @@ export default function App() {
   const [roomToken, setRoomToken] = useState(null);
   const [inRoomNickname, setInRoomNickname] = useState('');
   const [joining, setJoining] = useState(false);
+
+  // Check if current URL is a guest invite link: e.g. /join/:token
+  const [guestInviteToken, setGuestInviteToken] = useState(() => {
+    const path = window.location.pathname;
+    if (path.startsWith('/join/')) {
+      return path.replace('/join/', '').split('/')[0].split('?')[0];
+    }
+    return null;
+  });
 
   const handleAuthSuccess = (newToken, newUser, refreshToken) => {
     setToken(newToken);
@@ -53,6 +63,16 @@ export default function App() {
     localStorage.removeItem('omnicall_user');
   };
 
+  const handleGuestJoinSuccess = ({ room, roomToken: gToken, displayName, guestUser }) => {
+    setUser(guestUser);
+    setToken(gToken);
+    setRoomToken(gToken);
+    setInRoomNickname(displayName);
+    setActiveRoom(room);
+    // Clear URL path back to root without reloading
+    window.history.replaceState({}, '', '/');
+    setGuestInviteToken(null);
+  };
 
   const handleJoinCall = async (room, customNickname) => {
     setJoining(true);
@@ -72,7 +92,26 @@ export default function App() {
   const handleLeaveCall = () => {
     setActiveRoom(null);
     setRoomToken(null);
+    // If was guest, reset
+    if (user?.role === 'guest') {
+      setUser(null);
+      setToken(null);
+    }
   };
+
+  // If visiting an invite link and not yet in call, show Guest Lobby
+  if (guestInviteToken && !roomToken) {
+    return (
+      <GuestJoinLobby
+        inviteToken={guestInviteToken}
+        onGuestJoinSuccess={handleGuestJoinSuccess}
+        onGoToLogin={() => {
+          window.history.replaceState({}, '', '/');
+          setGuestInviteToken(null);
+        }}
+      />
+    );
+  }
 
   if (!token || !user) {
     return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
@@ -101,3 +140,4 @@ export default function App() {
     />
   );
 }
+

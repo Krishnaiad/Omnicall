@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Room, RoomEvent, Track, LocalVideoTrack } from 'livekit-client';
-import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check, UserPlus, Pin, PinOff, Tv, Zap, ZapOff, Volume2 } from 'lucide-react';
+import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check, UserPlus, Pin, PinOff, Tv, Zap, ZapOff, Volume2, BarChart3, Hand, Edit2, MessageSquareQuote } from 'lucide-react';
 import MediaInjector from './MediaInjector.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import EffectsPicker, { VIDEO_FILTERS, VIRTUAL_BACKGROUNDS } from './EffectsPicker.jsx';
 import PresentationStage from './PresentationStage.jsx';
 import InCallInviteModal from './InCallInviteModal.jsx';
+import WhiteboardModal from './WhiteboardModal.jsx';
+import PollsPanel from './PollsPanel.jsx';
+import HandRaiseQueue from './HandRaiseQueue.jsx';
+import LiveCaptionsOverlay from './LiveCaptionsOverlay.jsx';
 import { captureRoomSnapshot } from './snapshotUtils.js';
+
 
 function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin, isSpeaking, isDataSaver }) {
   const elRef = useRef(null);
@@ -132,6 +137,15 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [showEndMeetingConfirm, setShowEndMeetingConfirm] = useState(false);
   const [newNickname, setNewNickname] = useState('');
+
+  // ─── Room State Service UI States ──────────────────────────────────────────
+  const [showWhiteboard, setShowWhiteboard] = useState(false);
+  const [showPolls, setShowPolls] = useState(false);
+  const [showHandRaise, setShowHandRaise] = useState(false);
+  const [handRaiseCount, setHandRaiseCount] = useState(0);
+  const [captionsEnabled, setCaptionsEnabled] = useState(false);
+  // ───────────────────────────────────────────────────────────────────────────
+
   
   // Real-time Toast Banner
   const [toastNotice, setToastNotice] = useState(null);
@@ -641,6 +655,48 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             onClose={() => setShowInCallInvite(false)}
           />
         )}
+
+        {/* ─── Room State Service Modals & Overlays ─── */}
+        {showWhiteboard && (
+          <WhiteboardModal
+            token={token}
+            room={roomRef.current}
+            roomId={roomData.id}
+            isHost={isOwner}
+            onClose={() => setShowWhiteboard(false)}
+          />
+        )}
+
+        {showPolls && (
+          <PollsPanel
+            token={token}
+            room={roomRef.current}
+            roomId={roomData.id}
+            user={user}
+            isHost={isOwner}
+            onClose={() => setShowPolls(false)}
+          />
+        )}
+
+        {showHandRaise && (
+          <HandRaiseQueue
+            token={token}
+            room={roomRef.current}
+            roomId={roomData.id}
+            user={user}
+            isHost={isOwner}
+            onHandRaiseCountChange={(count) => setHandRaiseCount(count)}
+            onClose={() => setShowHandRaise(false)}
+          />
+        )}
+
+        {/* Live Subtitles & Captions Overlay */}
+        <LiveCaptionsOverlay
+          isEnabled={captionsEnabled}
+          room={roomRef.current}
+          user={user}
+          onClose={() => setCaptionsEnabled(false)}
+        />
       </div>
 
       <footer className="call-controls">
@@ -652,10 +708,74 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           {camOn ? <VideoIcon size={20} /> : <VideoOff size={20} />}
         </button>
 
+        {/* ✋ Hand Raising Queue Button */}
+        <button
+          className={`control-btn ${showHandRaise ? 'active' : ''}`}
+          onClick={() => setShowHandRaise((prev) => !prev)}
+          title="Virtual Hand Raising & Speaker Queue"
+          style={{ position: 'relative', background: handRaiseCount > 0 ? 'rgba(251, 191, 36, 0.2)' : undefined, borderColor: handRaiseCount > 0 ? '#fbbf24' : undefined }}
+        >
+          <Hand size={20} color={handRaiseCount > 0 ? '#fbbf24' : undefined} />
+          {handRaiseCount > 0 && (
+            <span
+              style={{
+                position: 'absolute',
+                top: '-4px',
+                right: '-4px',
+                background: '#fbbf24',
+                color: '#000',
+                borderRadius: '50%',
+                width: '18px',
+                height: '18px',
+                fontSize: '0.65rem',
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {handRaiseCount}
+            </span>
+          )}
+        </button>
+
+        {/* 📊 Polls & Q&A Button */}
+        <button
+          className={`control-btn ${showPolls ? 'active' : ''}`}
+          onClick={() => setShowPolls((prev) => !prev)}
+          title="In-Room Polls & Q&A"
+        >
+          <BarChart3 size={20} />
+        </button>
+
+        {/* 🎨 Collaborative Whiteboard Button */}
+        <button
+          className={`control-btn ${showWhiteboard ? 'active' : ''}`}
+          onClick={() => setShowWhiteboard((prev) => !prev)}
+          title="Interactive Collaborative Whiteboard"
+        >
+          <Edit2 size={20} />
+        </button>
+
+        {/* 🎙️ Live Captions Toggle Button */}
+        <button
+          className={`control-btn ${captionsEnabled ? 'active' : ''}`}
+          onClick={() => {
+            const next = !captionsEnabled;
+            setCaptionsEnabled(next);
+            setToastNotice(next ? '🎙️ Live Captions enabled' : 'Live Captions turned off');
+            setTimeout(() => setToastNotice(null), 2500);
+          }}
+          title={captionsEnabled ? "Turn off Live Captions" : "Turn on Live Captions"}
+          style={captionsEnabled ? { background: '#10b981', color: '#fff' } : {}}
+        >
+          <MessageSquareQuote size={20} />
+        </button>
+
         <button
           className="control-btn"
           onClick={() => setShowInCallInvite(true)}
-          title="Invite People by Username / Email"
+          title="Invite People by Username, Email, or Shareable Link"
           style={{ background: 'rgba(99, 102, 241, 0.25)', borderColor: '#818cf8' }}
         >
           <UserPlus size={20} color="#818cf8" />
@@ -737,6 +857,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           <PhoneOff size={20} />
         </button>
       </footer>
+
 
 
       {requestSentNotice && (

@@ -189,6 +189,54 @@ const TABLE_STATEMENTS = [
     disconnect_reason TEXT,
     UNIQUE (room_id, participant_identity)
   )`,
+  // hand_raises: Monotonic ordered queue for virtual hand raising with host moderation
+  `CREATE TABLE IF NOT EXISTS hand_raises (
+    id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    sequence_num INTEGER DEFAULT 1,
+    raised_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (room_id, user_id)
+  )`,
+  // polls: Host-gated interactive polls with server-authoritative status
+  `CREATE TABLE IF NOT EXISTS polls (
+    id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL,
+    creator_id TEXT NOT NULL,
+    creator_name TEXT NOT NULL,
+    question TEXT NOT NULL,
+    options_json TEXT NOT NULL,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  // poll_votes: Double-vote prevention via UNIQUE (poll_id, user_id)
+  `CREATE TABLE IF NOT EXISTS poll_votes (
+    id TEXT PRIMARY KEY,
+    poll_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    user_name TEXT,
+    option_index INTEGER NOT NULL,
+    voted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (poll_id, user_id)
+  )`,
+  // whiteboard_strokes: Append-only persistent canvas drawing strokes for late-joiner state recovery
+  `CREATE TABLE IF NOT EXISTS whiteboard_strokes (
+    id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    stroke_data TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  // invite_links: Shareable 1-click guest invite links with token verification
+  `CREATE TABLE IF NOT EXISTS invite_links (
+    id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL,
+    token TEXT UNIQUE NOT NULL,
+    created_by TEXT NOT NULL,
+    expires_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
 ];
 
 // Migration: add column if missing (safe for both SQLite and Postgres)

@@ -186,4 +186,86 @@ export const api = {
 
   getStreamUrl: (token, clipId) =>
     `${BASE_URL}/api/media/stream/${clipId}?token=${encodeURIComponent(token)}`,
+
+  // ─── Room State Service: Hand Raising ─────────────────────────────────────
+  raiseHand: (token, roomId) =>
+    request(`/api/rooms/${roomId}/raise-hand`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  lowerHand: (token, roomId, targetUserId = undefined) =>
+    request(`/api/rooms/${roomId}/lower-hand`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ targetUserId }),
+    }),
+
+  getHandRaises: (token, roomId) =>
+    request(`/api/rooms/${roomId}/hand-raises`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  // ─── Room State Service: Polls & Q&A ──────────────────────────────────────
+  createPoll: (token, roomId, question, options) =>
+    request(`/api/rooms/${roomId}/polls`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ question, options }),
+    }),
+
+  votePoll: (token, roomId, pollId, optionIndex) =>
+    request(`/api/rooms/${roomId}/polls/${pollId}/vote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ optionIndex }),
+    }),
+
+  closePoll: (token, roomId, pollId) =>
+    request(`/api/rooms/${roomId}/polls/${pollId}/close`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  getPolls: (token, roomId) =>
+    request(`/api/rooms/${roomId}/polls`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  // ─── Room State Service: Whiteboard ───────────────────────────────────────
+  saveWhiteboardStroke: (token, roomId, stroke) =>
+    request(`/api/rooms/${roomId}/whiteboard/strokes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ stroke }),
+    }),
+
+  getWhiteboard: (token, roomId) =>
+    request(`/api/rooms/${roomId}/whiteboard`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  clearWhiteboard: (token, roomId) =>
+    request(`/api/rooms/${roomId}/whiteboard`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  // ─── Room State Service: Shareable Links & Guest Access ───────────────────
+  getInviteLink: (token, roomId) =>
+    request(`/api/rooms/${roomId}/invite-link`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  getJoinPreview: (inviteToken) =>
+    request(`/api/rooms/join-preview/${inviteToken}`),
+
+  guestJoin: (inviteToken, guestName) =>
+    request(`/api/rooms/guest-join/${inviteToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guestName }),
+    }),
 };
+

@@ -5,7 +5,102 @@ import { requireAuth } from './auth.js';
 import { notifyUser } from './notifications.js';
 
 const router = Router();
+
+// ─── Public Guest Join & Preview Endpoints (No Login Required) ─────────────
+router.get('/join-preview/:token', async (req, res) => {
+  const { token } = req.params;
+  try {
+    const link = await db.queryGet('SELECT * FROM invite_links WHERE token = ?', [token]);
+    if (!link) return res.status(404).json({ error: 'Invite link is invalid or has expired' });
+
+    const room = await db.queryGet('SELECT id, name, owner_id FROM rooms WHERE id = ?', [link.room_id]);
+    if (!room) return res.status(404).json({ error: 'Associated room was not found' });
+
+    const owner = await db.queryGet('SELECT name, username FROM users WHERE id = ?', [room.owner_id]);
+
+    res.json({
+      ok: true,
+      roomId: room.id,
+      roomName: room.name,
+      hostName: owner?.name || 'Room Creator',
+      inviteToken: token,
+    });
+  } catch (err) {
+    console.error('Join preview failed:', err);
+    res.status(500).json({ error: 'Failed to inspect invite link' });
+  }
+});
+
+router.post('/guest-join/:token', async (req, res) => {
+  const { token } = req.params;
+  const { guestName } = req.body || {};
+
+  if (!guestName || !guestName.trim()) {
+    return res.status(400).json({ error: 'Please enter a display name to join the call' });
+  }
+
+  const cleanName = `${guestName.trim().slice(0, 30)} (Guest)`;
+  const guestUserId = `guest_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+
+  try {
+    const link = await db.queryGet('SELECT * FROM invite_links WHERE token = ?', [token]);
+    if (!link) return res.status(404).json({ error: 'Invite link is invalid or expired' });
+
+    const room = await db.queryGet('SELECT id, name FROM rooms WHERE id = ?', [link.room_id]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    const { apiKey, apiSecret } = getLiveKitCredentials();
+    if (!apiKey || !apiSecret) {
+      return res.status(500).json({ error: 'Server missing LiveKit credentials' });
+    }
+
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity: guestUserId,
+      name: cleanName,
+      ttl: '2h',
+      metadata: JSON.stringify({
+        role: 'guest',
+        isHost: false,
+        isGuest: true,
+        userId: guestUserId,
+        username: 'guest',
+      }),
+    });
+
+    at.addGrant({
+      roomJoin: true,
+      room: room.id,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+    });
+
+    const jwtToken = await at.toJwt();
+
+    res.json({
+      ok: true,
+      token: jwtToken,
+      roomName: room.name,
+      roomId: room.id,
+      displayName: cleanName,
+      role: 'guest',
+      isGuest: true,
+      guestUser: {
+        id: guestUserId,
+        name: cleanName,
+        username: 'guest',
+        role: 'guest',
+      },
+    });
+  } catch (err) {
+    console.error('Guest join failed:', err);
+    res.status(500).json({ error: 'Failed to generate guest access: ' + err.message });
+  }
+});
+
+// All routes below require authenticated user account
 router.use(requireAuth);
+
 
 function getLiveKitCredentials() {
   const apiKey = (process.env.LIVEKIT_API_KEY || '').trim();
@@ -378,5 +473,350 @@ router.get('/:roomId/live-status', async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ✋ ROOM STATE SERVICE: HAND RAISING (Feature 1 - Monotonic Ordered Queue)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Raise Hand (User calls — stamps monotonic sequence number on server)
+router.post('/:roomId/raise-hand', async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+
+    // Determine next monotonic sequence number for queue ordering
+    const maxRow = await db.queryGet(
+      'SELECT COALESCE(MAX(sequence_num), 0) as max_seq FROM hand_raises WHERE room_id = ?',
+      [roomId]
+    );
+    const nextSeq = (maxRow?.max_seq || 0) + 1;
+    const raiseId = randomUUID();
+
+    // Upsert hand raise row
+    await db.queryRun(
+      'DELETE FROM hand_raises WHERE room_id = ? AND user_id = ?',
+      [roomId, req.user.id]
+    );
+    await db.queryRun(
+      'INSERT INTO hand_raises (id, room_id, user_id, user_name, sequence_num) VALUES (?, ?, ?, ?, ?)',
+      [raiseId, roomId, req.user.id, req.user.name, nextSeq]
+    );
+
+    res.json({
+      ok: true,
+      handRaise: {
+        id: raiseId,
+        roomId,
+        userId: req.user.id,
+        userName: req.user.name,
+        sequenceNum: nextSeq,
+        raisedAt: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error('Raise hand failed:', err);
+    res.status(500).json({ error: 'Failed to raise hand' });
+  }
+});
+
+// Lower Hand (Self or Host moderation: host can lower any participant's hand)
+router.post('/:roomId/lower-hand', async (req, res) => {
+  const { roomId } = req.params;
+  const { targetUserId } = req.body || {};
+
+  try {
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    const isHost = room.owner_id === req.user.id;
+    const userToLower = (targetUserId && isHost) ? targetUserId : req.user.id;
+
+    await db.queryRun('DELETE FROM hand_raises WHERE room_id = ? AND user_id = ?', [roomId, userToLower]);
+    res.json({ ok: true, loweredUserId: userToLower });
+  } catch (err) {
+    console.error('Lower hand failed:', err);
+    res.status(500).json({ error: 'Failed to lower hand' });
+  }
+});
+
+// Get Active Hand Raise Queue (Late-joiner state recovery)
+router.get('/:roomId/hand-raises', async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+
+    const rows = await db.queryAll(
+      `SELECT id, user_id as "userId", user_name as "userName", sequence_num as "sequenceNum", raised_at as "raisedAt"
+       FROM hand_raises
+       WHERE room_id = ?
+       ORDER BY sequence_num ASC, raised_at ASC`,
+      [roomId]
+    );
+
+    res.json({ handRaises: rows });
+  } catch (err) {
+    console.error('Fetch hand raises failed:', err);
+    res.status(500).json({ error: 'Failed to load hand raise queue' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 📊 ROOM STATE SERVICE: POLLS & Q&A (Feature 2 - Server Authoritative Tally)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Create Poll (Host-Gated on Server)
+router.post('/:roomId/polls', async (req, res) => {
+  const { roomId } = req.params;
+  const { question, options } = req.body || {};
+
+  if (!question || !question.trim()) {
+    return res.status(400).json({ error: 'Poll question is required' });
+  }
+  if (!Array.isArray(options) || options.length < 2) {
+    return res.status(400).json({ error: 'At least 2 poll options are required' });
+  }
+
+  try {
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the room host can launch polls' });
+    }
+
+    const pollId = randomUUID();
+    const cleanOptions = options.map((opt) => String(opt).trim()).filter(Boolean);
+
+    await db.queryRun(
+      'INSERT INTO polls (id, room_id, creator_id, creator_name, question, options_json, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [pollId, roomId, req.user.id, req.user.name, question.trim(), JSON.stringify(cleanOptions), 'active']
+    );
+
+    res.status(201).json({
+      ok: true,
+      poll: {
+        id: pollId,
+        roomId,
+        creatorId: req.user.id,
+        creatorName: req.user.name,
+        question: question.trim(),
+        options: cleanOptions,
+        status: 'active',
+        votes: {},
+        totalVotes: 0,
+        createdAt: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error('Create poll failed:', err);
+    res.status(500).json({ error: 'Failed to launch poll' });
+  }
+});
+
+// Vote in Poll (Server-Side Unique Constraint Enforces 1 Vote Per User)
+router.post('/:roomId/polls/:pollId/vote', async (req, res) => {
+  const { roomId, pollId } = req.params;
+  const { optionIndex } = req.body || {};
+
+  if (typeof optionIndex !== 'number' || optionIndex < 0) {
+    return res.status(400).json({ error: 'Valid option index is required' });
+  }
+
+  try {
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+
+    const poll = await db.queryGet('SELECT * FROM polls WHERE id = ? AND room_id = ?', [pollId, roomId]);
+    if (!poll) return res.status(404).json({ error: 'Poll not found' });
+    if (poll.status !== 'active') return res.status(400).json({ error: 'This poll is already closed' });
+
+    const voteId = randomUUID();
+    // Delete prior vote if any, then insert new vote
+    await db.queryRun('DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?', [pollId, req.user.id]);
+    await db.queryRun(
+      'INSERT INTO poll_votes (id, poll_id, user_id, user_name, option_index) VALUES (?, ?, ?, ?, ?)',
+      [voteId, pollId, req.user.id, req.user.name, optionIndex]
+    );
+
+    // Compute updated authoritative tally
+    const voteRows = await db.queryAll('SELECT option_index FROM poll_votes WHERE poll_id = ?', [pollId]);
+    const tally = {};
+    for (const v of voteRows) {
+      tally[v.option_index] = (tally[v.option_index] || 0) + 1;
+    }
+
+    res.json({
+      ok: true,
+      pollId,
+      userVotedOption: optionIndex,
+      votes: tally,
+      totalVotes: voteRows.length,
+    });
+  } catch (err) {
+    console.error('Vote failed:', err);
+    res.status(500).json({ error: 'Failed to record vote' });
+  }
+});
+
+// Close Poll (Host-Only)
+router.post('/:roomId/polls/:pollId/close', async (req, res) => {
+  const { roomId, pollId } = req.params;
+  try {
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = ?', [roomId]);
+    if (!room || room.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the room host can close polls' });
+    }
+
+    await db.queryRun("UPDATE polls SET status = 'closed' WHERE id = ? AND room_id = ?", [pollId, roomId]);
+    res.json({ ok: true, pollId, status: 'closed' });
+  } catch (err) {
+    console.error('Close poll failed:', err);
+    res.status(500).json({ error: 'Failed to close poll' });
+  }
+});
+
+// List Polls with Authoritative Vote Counts (Late-Joiner State Recovery)
+router.get('/:roomId/polls', async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+
+    const pollRows = await db.queryAll('SELECT * FROM polls WHERE room_id = ? ORDER BY created_at DESC', [roomId]);
+    const pollsWithTally = await Promise.all(
+      pollRows.map(async (p) => {
+        let options = [];
+        try { options = JSON.parse(p.options_json); } catch {}
+
+        const voteRows = await db.queryAll('SELECT user_id, option_index FROM poll_votes WHERE poll_id = ?', [p.id]);
+        const tally = {};
+        let myVote = null;
+        for (const v of voteRows) {
+          tally[v.option_index] = (tally[v.option_index] || 0) + 1;
+          if (v.user_id === req.user.id) myVote = v.option_index;
+        }
+
+        return {
+          id: p.id,
+          roomId: p.room_id,
+          creatorId: p.creator_id,
+          creatorName: p.creator_name,
+          question: p.question,
+          options,
+          status: p.status,
+          votes: tally,
+          totalVotes: voteRows.length,
+          userVotedOption: myVote,
+          createdAt: p.created_at,
+        };
+      })
+    );
+
+    res.json({ polls: pollsWithTally });
+  } catch (err) {
+    console.error('Fetch polls failed:', err);
+    res.status(500).json({ error: 'Failed to load polls' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 🎨 ROOM STATE SERVICE: WHITEBOARD (Feature 3 - Append-Only Canvas History)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Save Stroke (Persist-First Before Broadcast)
+router.post('/:roomId/whiteboard/strokes', async (req, res) => {
+  const { roomId } = req.params;
+  const { stroke } = req.body || {};
+
+  if (!stroke) return res.status(400).json({ error: 'Stroke data is required' });
+
+  try {
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+
+    const strokeId = randomUUID();
+    await db.queryRun(
+      'INSERT INTO whiteboard_strokes (id, room_id, user_id, stroke_data) VALUES (?, ?, ?, ?)',
+      [strokeId, roomId, req.user.id, JSON.stringify(stroke)]
+    );
+
+    res.status(201).json({ ok: true, id: strokeId });
+  } catch (err) {
+    console.error('Save stroke failed:', err);
+    res.status(500).json({ error: 'Failed to save whiteboard stroke' });
+  }
+});
+
+// Fetch Full Whiteboard Canvas History (Late-Joiner State Recovery)
+router.get('/:roomId/whiteboard', async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+
+    const rows = await db.queryAll(
+      'SELECT id, user_id as "userId", stroke_data as "strokeData", created_at as "createdAt" FROM whiteboard_strokes WHERE room_id = ? ORDER BY created_at ASC',
+      [roomId]
+    );
+
+    const strokes = rows.map((r) => {
+      try {
+        return { id: r.id, userId: r.userId, ...JSON.parse(r.strokeData) };
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+
+    res.json({ strokes });
+  } catch (err) {
+    console.error('Fetch whiteboard failed:', err);
+    res.status(500).json({ error: 'Failed to load whiteboard history' });
+  }
+});
+
+// Clear Whiteboard Canvas
+router.delete('/:roomId/whiteboard', async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+
+    await db.queryRun('DELETE FROM whiteboard_strokes WHERE room_id = ?', [roomId]);
+    res.json({ ok: true, message: 'Whiteboard canvas cleared' });
+  } catch (err) {
+    console.error('Clear whiteboard failed:', err);
+    res.status(500).json({ error: 'Failed to clear whiteboard' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 🔗 ROOM STATE SERVICE: SHAREABLE GUEST INVITE LINKS (Feature 4)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Generate or Fetch Shareable Invite Link
+router.post('/:roomId/invite-link', async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+
+    let link = await db.queryGet('SELECT token FROM invite_links WHERE room_id = ?', [roomId]);
+    if (!link) {
+      const token = randomUUID().replace(/-/g, '').slice(0, 16);
+      await db.queryRun(
+        'INSERT INTO invite_links (id, room_id, token, created_by) VALUES (?, ?, ?, ?)',
+        [randomUUID(), roomId, token, req.user.id]
+      );
+      link = { token };
+    }
+
+    res.json({ ok: true, inviteToken: link.token, joinPath: `/join/${link.token}` });
+  } catch (err) {
+    console.error('Generate invite link failed:', err);
+    res.status(500).json({ error: 'Failed to create invite link' });
+  }
+});
+
 export default router;
+
 
