@@ -319,14 +319,30 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     async function connect() {
       try {
         await room.connect(livekitUrl, roomToken);
-        await room.localParticipant.setCameraEnabled(true);
-        await room.localParticipant.setMicrophoneEnabled(true);
+
+        // Graceful device activation (phone browsers may prompt or block camera/mic)
+        try {
+          await room.localParticipant.setCameraEnabled(true);
+          setCamOn(true);
+        } catch (camErr) {
+          console.warn('Camera permission note:', camErr.message);
+          setCamOn(false);
+        }
+
+        try {
+          await room.localParticipant.setMicrophoneEnabled(true);
+          setMicOn(true);
+        } catch (micErr) {
+          console.warn('Mic permission note:', micErr.message);
+          setMicOn(false);
+        }
       } catch (err) {
         console.error('Failed to connect to LiveKit room:', err);
         setToastNotice(`❌ Failed to join call: ${err.message}`);
-        setTimeout(() => onLeave(), 3000);
+        setTimeout(() => onLeave(), 4000);
       }
     }
+
 
     connect();
 

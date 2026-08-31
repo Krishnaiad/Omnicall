@@ -30,8 +30,13 @@ app.use(
 
 app.use(
   cors({
-    origin: CLIENT_ORIGIN,
+    origin: (origin, callback) => {
+      // Permissive dynamic reflection allows Vercel frontend, mobile browsers, and local dev with credentials: true
+      callback(null, true);
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   })
 );
 
@@ -40,30 +45,28 @@ app.post('/api/webhooks/livekit', express.raw({ type: 'application/webhook+json'
 
 app.use(express.json());
 
-// Strict rate limit for auth endpoints (credential stuffing protection: max 10 failed attempts per 15min per IP)
+// Relaxed rate limits during active testing
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 200,
   skipSuccessfulRequests: true,
-  message: { error: 'Too many authentication attempts from this IP. Please wait 15 minutes before trying again.' },
+  message: { error: 'Too many authentication attempts. Please wait a few minutes before trying again.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// General API rate limit for all non-auth endpoints
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
-  message: { error: 'Too many requests from this IP, please try again later.' },
+  max: 1000,
+  message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Auth routes get strict limiter FIRST
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
-// All /api/ routes get general limiter
 app.use('/api/', apiLimiter);
+
 
 // API Routers
 app.use('/api/auth', authRouter);
