@@ -257,10 +257,73 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
     }
   };
 
+  const handleCreateRoom = async (e) => {
+
+    e.preventDefault();
+    if (!newRoomName.trim()) return;
+    setError('');
+    setSuccess('');
+    try {
+      await api.createRoom(token, newRoomName.trim());
+      setNewRoomName('');
+      setSuccess(`Room "${newRoomName.trim()}" created successfully!`);
+      fetchRooms();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleInvite = async (roomId) => {
+    const identifier = (inviteEmail[roomId] || '').trim();
+    if (!identifier) return;
+    setError('');
+    setSuccess('');
+    try {
+      await api.inviteUser(token, roomId, identifier);
+      setInviteEmail((prev) => ({ ...prev, [roomId]: '' }));
+      setSuccess(`Invited ${identifier} successfully!`);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const confirmDeleteRoom = async () => {
+    if (!deletingRoomTarget) return;
+    setDeleting(true);
+    setError('');
+    try {
+      await api.deleteRoom(token, deletingRoomTarget.id);
+      setDeletingRoomTarget(null);
+      setSuccess(`Room "${deletingRoomTarget.name}" deleted.`);
+      fetchRooms();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const confirmLeaveRoom = async () => {
+    if (!leavingRoomTarget) return;
+    setLeaving(true);
+    setError('');
+    try {
+      await api.leaveRoom(token, leavingRoomTarget.id);
+      setLeavingRoomTarget(null);
+      setSuccess(`Left room "${leavingRoomTarget.name}".`);
+      fetchRooms();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLeaving(false);
+    }
+  };
+
   const promptJoin = (room) => {
     setJoiningRoom(room);
-    setCustomNickname(user.name);
+    setCustomNickname(user?.name || '');
   };
+
 
   const confirmJoin = (e) => {
     e.preventDefault();
