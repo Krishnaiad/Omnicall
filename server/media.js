@@ -2,7 +2,6 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import ffmpeg from 'fluent-ffmpeg';
 import { db, randomUUID } from './db.js';
 import { requireAuth } from './auth.js';
 import { storageConfig } from './config.js';
@@ -13,10 +12,7 @@ const router = Router();
 router.use(requireAuth);
 
 const uploadsDir = path.resolve(process.env.UPLOADS_DIR || './uploads');
-const processedDir = path.resolve(process.env.PROCESSED_DIR || './processed');
-
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-if (!fs.existsSync(processedDir)) fs.mkdirSync(processedDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadsDir),
@@ -57,48 +53,7 @@ const upload = multer({
   },
 });
 
-function transcodeMedia(fileId, inputPath, outputPath, isImage, isAudio) {
-  return new Promise((resolve) => {
-    if (isImage) {
-      try {
-        fs.copyFileSync(inputPath, outputPath);
-        fs.unlinkSync(inputPath);
-      } catch (err) {
-        console.error('Image file copy error:', err);
-      }
-      return resolve({ success: true, path: outputPath });
-    }
-
-    const cmd = ffmpeg(inputPath)
-      .output(outputPath)
-      .audioCodec('aac')
-      .format('mp4');
-
-    if (isAudio) {
-      cmd.noVideo();
-    } else {
-      cmd.videoCodec('libx264');
-    }
-
-    cmd.on('end', () => {
-        try { fs.unlinkSync(inputPath); } catch {}
-        resolve({ success: true, path: outputPath });
-      })
-      .on('error', (err) => {
-        console.warn(`FFmpeg transcoding notice for ${fileId}:`, err.message);
-        try {
-          fs.copyFileSync(inputPath, outputPath);
-          fs.unlinkSync(inputPath);
-        } catch (copyErr) {
-          console.error('Failed fallback media copy:', copyErr);
-        }
-        resolve({ success: true, path: outputPath });
-      })
-      .run();
-  });
-}
-
-// Upload endpoint for Images, Video, and Audio (Supports Cloudinary, R2 & Local Disk)
+// Upload endpoint for Images, Video, and Audio (Direct Fast Cloudinary / Storage Streaming)
 router.post('/upload', (req, res) => {
   upload.single('clip')(req, res, async (err) => {
     if (err) {
@@ -114,24 +69,18 @@ router.post('/upload', (req, res) => {
     const isVideo = req.file.mimetype.startsWith('video/');
     const ext = path.extname(req.file.originalname) || (isImage ? '.png' : '.mp4');
     const processedFilename = `${fileId}${ext}`;
-    const outputPath = path.join(processedDir, processedFilename);
     const storageKey = `media/${processedFilename}`;
     const provider = storageConfig.provider;
-
-    let targetPath = req.file.path;
+    const tempPath = req.file.path;
 
     try {
-      // 1. Process / transcode media file
-      await transcodeMedia(fileId, req.file.path, outputPath, isImage, isAudio);
-      targetPath = outputPath;
-
       let publicUrl = null;
       let finalKey = storageKey;
       let duration = 0;
 
-      // 2. Upload to Cloudinary, Cloudflare R2, or Local Disk
+      // Direct upload to Cloudinary (zero CPU / zero local RAM)
       if (provider === 'cloudinary') {
-        const cloudRes = await cloudinaryHelper.uploadMedia(outputPath, {
+        const cloudRes = await cloudinaryHelper.uploadMedia(tempPath, {
           isVideo,
           isAudio,
           publicId: fileId,
@@ -139,60 +88,68 @@ router.post('/upload', (req, res) => {
         publicUrl = cloudRes.secureUrl;
         finalKey = cloudRes.publicId;
         duration = cloudRes.duration || 0;
+        
+        // Immediately clean up temp file from disk
+        try { fs.unlinkSync(tempPath); } catch {}
       } else if (provider === 'r2') {
-        const fileStream = fs.createReadStream(outputPath);
-        const stat = fs.statSync(outputPath);
+        const fileStream = fs.createReadStream(tempPath);
+        const stat = fs.statSync(tempPath);
         await r2.uploadStream(storageKey, fileStream, {
           contentType: req.file.mimetype,
           sizeHint: stat.size,
         });
         publicUrl = process.env.R2_PUBLIC_DOMAIN ? `https://${process.env.R2_PUBLIC_DOMAIN}/${storageKey}` : null;
+        try { fs.unlinkSync(tempPath); } catch {}
       } else {
-        publicUrl = `/uploads/${processedFilename}`;
+        publicUrl = `/uploads/${path.basename(tempPath)}`;
       }
 
-      // 3. Single DB Insert into Supabase PostgreSQL
-      try {
-        await db.queryRun(
-          `INSERT INTO media_files (id, user_id, original_name, mime_type, file_path, storage_provider, storage_key, public_url, duration, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [fileId, req.user.id, req.file.originalname, req.file.mimetype, targetPath, provider, finalKey, publicUrl, duration, 'ready']
-        );
-      } catch (dbErr) {
-        // Compensating action: If DB insert fails, delete uploaded file from Cloudinary/R2/local
-        console.error('[Storage Compensating Action] DB Insert failed, deleting uploaded file:', dbErr.message);
-        if (provider === 'cloudinary') {
-          await cloudinaryHelper.deleteMedia(finalKey, { isVideo, isAudio }).catch(() => {});
-        } else if (provider === 'r2') {
-          await r2.deleteObject(storageKey).catch(() => {});
-        }
-        try { if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath); } catch {}
-        throw dbErr;
-      }
-
-      // 4. Clean up local processed file if uploaded to Cloud
-      if (provider === 'cloudinary' || provider === 'r2') {
-        try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath); } catch {}
-      }
+      // Single DB Insert into Supabase PostgreSQL
+      await db.queryRun(
+        `INSERT INTO media_files (id, user_id, original_name, mime_type, file_path, storage_provider, storage_key, public_url, duration, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [fileId, req.user.id, req.file.originalname, req.file.mimetype, tempPath, provider, finalKey, publicUrl, duration, 'ready']
+      );
 
       res.status(201).json({
-        message: 'Media uploaded successfully',
-        clip: {
+        ok: true,
+        file: {
           id: fileId,
-          name: req.file.originalname,
+          originalName: req.file.originalname,
           mimeType: req.file.mimetype,
           storageProvider: provider,
           publicUrl,
+          duration,
           status: 'ready',
+          createdAt: new Date().toISOString(),
         },
       });
     } catch (uploadErr) {
-      console.error('Save media failed:', uploadErr);
-      try { if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath); } catch {}
-      res.status(500).json({ error: 'Failed to process media file: ' + uploadErr.message });
+      console.error('Media upload failed:', uploadErr);
+      try { fs.unlinkSync(tempPath); } catch {}
+      res.status(500).json({ error: 'Media processing failed: ' + uploadErr.message });
     }
   });
 });
+
+// Delete all user's uploaded clips (Bulk cleanup)
+router.delete('/all', async (req, res) => {
+  try {
+    const clips = await db.queryAll('SELECT id, storage_provider, storage_key, mime_type FROM media_files WHERE user_id = ?', [req.user.id]);
+    for (const clip of clips) {
+      if (clip.storage_provider === 'cloudinary' && clip.storage_key) {
+        const isVideo = clip.mime_type?.startsWith('video/') || clip.mime_type?.startsWith('audio/');
+        await cloudinaryHelper.deleteMedia(clip.storage_key, { isVideo }).catch(() => {});
+      }
+    }
+    await db.queryRun('DELETE FROM media_files WHERE user_id = ?', [req.user.id]);
+    res.json({ ok: true, message: 'All uploaded media deleted successfully' });
+  } catch (err) {
+    console.error('Delete all clips failed:', err);
+    res.status(500).json({ error: 'Failed to delete media clips' });
+  }
+});
+
 
 // List user's uploaded clips with storage provider badge
 router.get('/list', async (req, res) => {

@@ -12,7 +12,9 @@ import authRouter from './auth.js';
 import roomRouter from './room.js';
 import mediaRouter from './media.js';
 import notificationRouter from './notifications.js';
+import memoriesRouter from './memories.js';
 import { handleLiveKitWebhook } from './webhooks.js';
+
 
 const app = express();
 const server = createServer(app);
@@ -68,6 +70,8 @@ app.use('/api/auth', authRouter);
 app.use('/api/rooms', roomRouter);
 app.use('/api/media', mediaRouter);
 app.use('/api/notifications', notificationRouter);
+app.use('/api/memories', memoriesRouter);
+
 
 // Production Health Check (DB + Storage)
 app.get('/health', async (_req, res) => {

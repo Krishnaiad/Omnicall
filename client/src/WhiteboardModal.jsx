@@ -1,19 +1,43 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { RoomEvent } from 'livekit-client';
-import { X, Trash2, Edit2, Eraser, Download, Circle } from 'lucide-react';
+import { X, Trash2, Edit2, Eraser, Download, Camera, Users, Eye, EyeOff } from 'lucide-react';
 import { api } from './api.js';
 
 const COLORS = ['#ffffff', '#6366f1', '#ec4899', '#10b981', '#fbbf24', '#ef4444', '#38bdf8'];
 const SIZES = [2, 4, 8, 14];
 
-export default function WhiteboardModal({ token, room, roomId, isHost, onClose }) {
+function MiniVideoTile({ trackItem }) {
+  const elRef = useRef(null);
+
+  useEffect(() => {
+    const el = elRef.current;
+    if (!trackItem?.track || !el) return;
+    trackItem.track.attach(el);
+    return () => {
+      trackItem.track.detach(el);
+    };
+  }, [trackItem?.track]);
+
+  const label = trackItem?.name || trackItem?.identity || 'Peer';
+
+  return (
+    <div className="wb-mini-tile">
+      <video ref={elRef} autoPlay playsInline muted={trackItem?.isLocal} />
+      <div className="wb-mini-label">{label}</div>
+    </div>
+  );
+}
+
+export default function WhiteboardModal({ token, room, roomId, isHost, videoTracks = [], onClose }) {
   const canvasRef = useRef(null);
   const isDrawingRef = useRef(false);
   const currentStrokeRef = useRef([]);
   const [selectedColor, setSelectedColor] = useState('#6366f1');
   const [selectedSize, setSelectedSize] = useState(4);
   const [isEraser, setIsEraser] = useState(false);
+  const [showVideoRibbon, setShowVideoRibbon] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const drawSegment = useCallback((ctx, fromX, fromY, toX, toY, color, size) => {
     ctx.beginPath();
@@ -42,7 +66,7 @@ export default function WhiteboardModal({ token, room, roomId, isHost, onClose }
     strokes.forEach((s) => renderStroke(ctx, s));
   }, [renderStroke]);
 
-  // 1. Fetch full stroke history on mount (Late-Joiner State Recovery)
+  // 1. Fetch full stroke history on mount
   useEffect(() => {
     let mounted = true;
     const loadHistory = async () => {
@@ -60,7 +84,7 @@ export default function WhiteboardModal({ token, room, roomId, isHost, onClose }
 
     loadHistory();
 
-    // 2. Listen for real-time stroke broadcasts from peers over LiveKit Reliable DataChannel
+    // 2. Listen for real-time stroke broadcasts
     if (!room) return;
 
     const handleDataReceived = (payload, _participant, _kind, topic) => {
@@ -140,14 +164,12 @@ export default function WhiteboardModal({ token, room, roomId, isHost, onClose }
       size: activeSize,
     };
 
-    // A. Persist to Postgres FIRST (canonical state)
     try {
       await api.saveWhiteboardStroke(token, roomId, strokeObj);
     } catch (err) {
       console.warn('Failed to persist stroke:', err.message);
     }
 
-    // B. Broadcast over LiveKit Reliable DataChannel
     try {
       if (room?.localParticipant) {
         const encoder = new TextEncoder();
@@ -187,35 +209,90 @@ export default function WhiteboardModal({ token, room, roomId, isHost, onClose }
     a.click();
   };
 
+  const handleSaveToMemories = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const url = canvas.toDataURL('image/png');
+
+    try {
+      await api.saveMemory(token, {
+        roomId,
+        roomName: 'Whiteboard Drawing',
+        mediaUrl: url,
+        caption: 'Whiteboard Session Canvas',
+      });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Failed to save to memories:', err);
+    }
+  };
+
   return (
     <div className="modal-backdrop" style={{ zIndex: 1200 }}>
-      <div className="glass-card" style={{ width: '92vw', maxWidth: '1000px', height: '88vh', display: 'flex', flexDirection: 'column', padding: '16px', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.05rem', color: '#a5b4fc' }}>
-            <Edit2 size={20} color="#818cf8" /> Interactive In-Call Whiteboard
+      <div className="glass-card" style={{ width: '95vw', maxWidth: '1100px', height: '90vh', display: 'flex', flexDirection: 'column', padding: '14px', overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1rem', color: '#a5b4fc' }}>
+            <Edit2 size={18} color="#818cf8" /> Interactive In-Call Whiteboard
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button className="btn-outline" onClick={handleDownload} title="Export Drawing as PNG" style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Download size={14} /> Export PNG
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {videoTracks.length > 0 && (
+              <button
+                className="btn-outline"
+                onClick={() => setShowVideoRibbon((prev) => !prev)}
+                title="Toggle In-Call Video Ribbon"
+                style={{ padding: '5px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                {showVideoRibbon ? <EyeOff size={13} /> : <Eye size={13} />}
+                {showVideoRibbon ? 'Hide Video' : 'Show Video'}
+              </button>
+            )}
+
+            <button
+              className="btn-outline"
+              onClick={handleSaveToMemories}
+              title="Save Canvas Snapshot to Personal Room Memories"
+              style={{ padding: '5px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', color: '#6ee7b7', borderColor: 'rgba(16,185,129,0.4)' }}
+            >
+              <Camera size={13} /> {saveSuccess ? 'Saved to Memories!' : 'Save Memory'}
             </button>
-            <button className="btn-outline danger" onClick={handleClear} title="Clear Canvas" style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)' }}>
-              <Trash2 size={14} /> Clear
+
+            <button className="btn-outline" onClick={handleDownload} title="Export Drawing as PNG" style={{ padding: '5px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Download size={13} /> Export PNG
             </button>
-            <button onClick={onClose} style={{ background: 'transparent', color: 'var(--text-muted)', marginLeft: '8px' }}>
-              <X size={20} />
+
+            <button className="btn-outline danger" onClick={handleClear} title="Clear Canvas" style={{ padding: '5px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)' }}>
+              <Trash2 size={13} /> Clear
+            </button>
+
+            <button onClick={onClose} style={{ background: 'transparent', color: 'var(--text-muted)', marginLeft: '6px' }}>
+              <X size={18} />
             </button>
           </div>
         </div>
 
+        {/* Live Video Ribbon: Participants remain clearly visible while drawing! */}
+        {showVideoRibbon && videoTracks.length > 0 && (
+          <div className="wb-video-ribbon" style={{ marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+              <Users size={12} /> Live ({videoTracks.length}):
+            </span>
+            {videoTracks.map((item) => (
+              <MiniVideoTile key={item.sid} trackItem={item} />
+            ))}
+          </div>
+        )}
+
         {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px', flexWrap: 'wrap', background: 'rgba(0,0,0,0.3)', padding: '8px 14px', borderRadius: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap', background: 'rgba(0,0,0,0.3)', padding: '6px 12px', borderRadius: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <button
               type="button"
               className={`btn-outline ${!isEraser ? 'active' : ''}`}
               onClick={() => setIsEraser(false)}
-              style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+              style={{ padding: '3px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
               <Edit2 size={12} /> Pen
             </button>
@@ -223,27 +300,27 @@ export default function WhiteboardModal({ token, room, roomId, isHost, onClose }
               type="button"
               className={`btn-outline ${isEraser ? 'active' : ''}`}
               onClick={() => setIsEraser(true)}
-              style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+              style={{ padding: '3px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
               <Eraser size={12} /> Eraser
             </button>
           </div>
 
           {!isEraser && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Color:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Color:</span>
               {COLORS.map((c) => (
                 <button
                   key={c}
                   type="button"
                   onClick={() => setSelectedColor(c)}
                   style={{
-                    width: '20px',
-                    height: '20px',
+                    width: '18px',
+                    height: '18px',
                     borderRadius: '50%',
                     background: c,
                     border: selectedColor === c ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
-                    transform: selectedColor === c ? 'scale(1.2)' : 'none',
+                    transform: selectedColor === c ? 'scale(1.15)' : 'none',
                     cursor: 'pointer',
                   }}
                 />
@@ -251,20 +328,20 @@ export default function WhiteboardModal({ token, room, roomId, isHost, onClose }
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Thickness:</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Size:</span>
             {SIZES.map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => setSelectedSize(s)}
                 style={{
-                  padding: '2px 8px',
-                  borderRadius: '6px',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
                   background: selectedSize === s ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)',
                   color: selectedSize === s ? '#a5b4fc' : 'var(--text-muted)',
                   border: selectedSize === s ? '1px solid #818cf8' : '1px solid transparent',
-                  fontSize: '0.75rem',
+                  fontSize: '0.7rem',
                   cursor: 'pointer',
                 }}
               >
@@ -273,7 +350,7 @@ export default function WhiteboardModal({ token, room, roomId, isHost, onClose }
             ))}
           </div>
 
-          {loading && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>Loading strokes…</span>}
+          {loading && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>Syncing canvas…</span>}
         </div>
 
         {/* Canvas Element */}

@@ -315,6 +315,41 @@ router.post('/:roomId/invite', async (req, res) => {
   }
 });
 
+// End Meeting for Everyone (Host Only) — Active SFU Disconnect + DB Cleanup
+router.post('/:roomId/end-meeting', async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the room creator can end the meeting for everyone' });
+    }
+
+    // 1. Close LiveKit SFU room actively if credentials present
+    const { apiKey, apiSecret, httpUrl } = getLiveKitCredentials();
+    if (apiKey && apiSecret && httpUrl) {
+      try {
+        const { RoomServiceClient } = await import('livekit-server-sdk');
+        const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
+        await roomService.deleteRoom(roomId).catch(() => {});
+      } catch (err) {
+        console.warn('[LiveKit SFU Teardown Notice]:', err.message);
+      }
+    }
+
+    // 2. Mark all live_sessions as ended
+    await db.queryRun(
+      'UPDATE live_sessions SET left_at = NOW(), disconnect_reason = ? WHERE room_id = ? AND left_at IS NULL',
+      ['host_ended_meeting', roomId]
+    ).catch(() => {});
+
+    res.json({ ok: true, message: 'Meeting ended successfully for all participants' });
+  } catch (err) {
+    console.error('End meeting failed:', err);
+    res.status(500).json({ error: 'Failed to end meeting: ' + err.message });
+  }
+});
+
 // Bulletproof Delete Room (Owner Only)
 router.delete('/:roomId', async (req, res) => {
   const { roomId } = req.params;
@@ -326,8 +361,22 @@ router.delete('/:roomId', async (req, res) => {
       return res.status(403).json({ error: 'Only the room owner can delete this room' });
     }
 
+    // Delete from LiveKit SFU
+    const { apiKey, apiSecret, httpUrl } = getLiveKitCredentials();
+    if (apiKey && apiSecret && httpUrl) {
+      try {
+        const { RoomServiceClient } = await import('livekit-server-sdk');
+        const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
+        await roomService.deleteRoom(roomId).catch(() => {});
+      } catch (_) {}
+    }
+
     try { await db.queryRun('DELETE FROM chat_messages WHERE room_id = ?', [roomId]); } catch (_) {}
     try { await db.queryRun('DELETE FROM room_members WHERE room_id = ?', [roomId]); } catch (_) {}
+    try { await db.queryRun('DELETE FROM hand_raises WHERE room_id = ?', [roomId]); } catch (_) {}
+    try { await db.queryRun('DELETE FROM polls WHERE room_id = ?', [roomId]); } catch (_) {}
+    try { await db.queryRun('DELETE FROM whiteboard_strokes WHERE room_id = ?', [roomId]); } catch (_) {}
+    try { await db.queryRun('DELETE FROM invite_links WHERE room_id = ?', [roomId]); } catch (_) {}
     await db.queryRun('DELETE FROM rooms WHERE id = ?', [roomId]);
 
     res.json({ ok: true, message: 'Room deleted successfully' });
@@ -336,6 +385,7 @@ router.delete('/:roomId', async (req, res) => {
     res.status(500).json({ error: 'Failed to delete room: ' + err.message });
   }
 });
+
 
 // Bulletproof Leave Room (Member Only)
 router.delete('/:roomId/leave', async (req, res) => {

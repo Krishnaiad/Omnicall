@@ -105,4 +105,7 @@ export async function captureRoomSnapshot(roomName) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+
+  return dataUrl;
 }
+

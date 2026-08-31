@@ -1,16 +1,19 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from './api.js';
-import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive } from 'lucide-react';
+import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive, Image as ImageIcon, Download, Search, CheckCircle2, Sparkles, Camera } from 'lucide-react';
 
 export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpdate }) {
   const [rooms, setRooms] = useState([]);
   const [clips, setClips] = useState([]);
+  const [memories, setMemories] = useState([]);
   const [newRoomName, setNewRoomName] = useState('');
   const [inviteEmail, setInviteEmail] = useState({});
   const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loadingRooms, setLoadingRooms] = useState(true);
+  const [loadingMemories, setLoadingMemories] = useState(true);
   const [uploading, setUploading] = useState(false);
 
   // Real-time Invite Notice Banner
@@ -19,6 +22,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
   // Admin User Directory Modal State
   const [showAdminDirectory, setShowAdminDirectory] = useState(false);
   const [adminUsersList, setAdminUsersList] = useState([]);
+  const [adminSearch, setAdminSearch] = useState('');
   const [loadingAdminUsers, setLoadingAdminUsers] = useState(false);
 
   // Profile Modal State
@@ -26,6 +30,9 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
   const [editName, setEditName] = useState(user.name || '');
   const [editUsername, setEditUsername] = useState(user.username || '');
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // Fullscreen Memory View Modal State
+  const [selectedMemoryView, setSelectedMemoryView] = useState(null);
 
   // Join Call Nickname Modal State
   const [joiningRoom, setJoiningRoom] = useState(null);
@@ -56,30 +63,44 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
   const fetchClips = async () => {
     try {
       const data = await api.listClips(token);
-      setClips(data.clips || []);
+      const rawClips = data.clips || [];
+      const uniqueClips = Array.from(new Map(rawClips.map((c) => [c.id, c])).values());
+      setClips(uniqueClips);
     } catch (err) {
       console.error('Failed to list media clips:', err);
     }
   };
 
+
+  const fetchMemories = async () => {
+    try {
+      const data = await api.getMemories(token);
+      setMemories(data.memories || []);
+    } catch (err) {
+      console.error('Failed to list memories:', err);
+    } finally {
+      setLoadingMemories(false);
+    }
+  };
+
   const fetchAdminUsers = async () => {
-    if (!isAdmin) return;
     setLoadingAdminUsers(true);
     try {
       const data = await api.listUsers(token);
       setAdminUsersList(data.users || []);
     } catch (err) {
-      setError(`Admin Error: ${err.message}`);
+      setError(`Directory Error: ${err.message}`);
     } finally {
       setLoadingAdminUsers(false);
     }
   };
 
+
   useEffect(() => {
     fetchRooms();
     fetchClips();
+    fetchMemories();
 
-    // Native Browser Server-Sent Events (SSE) notification stream for instant live invites
     const sseUrl = `${api.BASE_URL}/api/notifications/stream?token=${encodeURIComponent(token)}`;
     const es = new EventSource(sseUrl);
     eventSourceRef.current = es;
@@ -107,7 +128,6 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
     };
   }, [token, user.id]);
 
-  // Auto-clear error and success messages after 5 seconds
   useEffect(() => {
     if (error) {
       const t = setTimeout(() => setError(''), 5000);
@@ -145,7 +165,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update profile');
 
-      setSuccess('Profile updated successfully!');
+      setSuccess(`✅ Profile updated to @${data.user.username} successfully!`);
       if (onUserUpdate) onUserUpdate(data.user, data.token, data.refreshToken);
       setShowProfileModal(false);
     } catch (err) {
@@ -155,66 +175,15 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
     }
   };
 
-  const handleCreateRoom = async (e) => {
-    e.preventDefault();
-    if (!newRoomName.trim()) return;
-    setError('');
-    setSuccess('');
-    try {
-      await api.createRoom(token, newRoomName.trim());
-      setNewRoomName('');
-      setSuccess('Room created successfully!');
-      fetchRooms();
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const confirmDeleteRoom = async () => {
-    if (!deletingRoomTarget) return;
-    setDeleting(true);
-    setError('');
-    setSuccess('');
-    try {
-      await api.deleteRoom(token, deletingRoomTarget.id);
-      setSuccess(`Room "${deletingRoomTarget.name}" deleted successfully.`);
-      setRooms((prev) => prev.filter((r) => r.id !== deletingRoomTarget.id));
-      setDeletingRoomTarget(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const confirmLeaveRoom = async () => {
-    if (!leavingRoomTarget) return;
-    setLeaving(true);
-    setError('');
-    setSuccess('');
-    try {
-      await api.leaveRoom(token, leavingRoomTarget.id);
-      setSuccess(`Left room "${leavingRoomTarget.name}".`);
-      setRooms((prev) => prev.filter((r) => r.id !== leavingRoomTarget.id));
-      setLeavingRoomTarget(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLeaving(false);
-    }
-  };
-
-  const handleInvite = async (roomId) => {
-    const term = (inviteEmail[roomId] || '').trim();
-    if (!term) return;
-    setError('');
-    setSuccess('');
-    try {
-      await api.inviteToRoom(token, roomId, term);
-      setInviteEmail((prev) => ({ ...prev, [roomId]: '' }));
-      setSuccess(`Invited ${term} to room successfully!`);
-    } catch (err) {
-      setError(err.message);
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+    if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+    } else {
+      setPreviewUrl(null);
     }
   };
 
@@ -231,7 +200,8 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
     try {
       await api.uploadClip(token, formData);
       setSelectedFile(null);
-      setSuccess('Media file uploaded successfully!');
+      setPreviewUrl(null);
+      setSuccess('✅ Media uploaded to Cloud storage successfully!');
       fetchClips();
     } catch (err) {
       setError(err.message);
@@ -244,6 +214,29 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
     try {
       await api.deleteClip(token, id);
       fetchClips();
+      setSuccess('Media deleted.');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteAllClips = async () => {
+    if (!window.confirm('Delete all uploaded media files?')) return;
+    try {
+      await api.deleteAllClips(token);
+      setClips([]);
+      setSuccess('All media clips deleted.');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteMemory = async (id) => {
+    try {
+      await api.deleteMemory(token, id);
+      setMemories((prev) => prev.filter((m) => m.id !== id));
+      if (selectedMemoryView?.id === id) setSelectedMemoryView(null);
+      setSuccess('Memory snapshot deleted.');
     } catch (err) {
       setError(err.message);
     }
@@ -261,72 +254,75 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
     setJoiningRoom(null);
   };
 
+
   return (
-    <div className="dashboard-layout" style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px' }}>
-      {/* Top Navbar */}
-      <nav className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', marginBottom: '28px', border: '1px solid rgba(129, 140, 248, 0.25)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)', borderRadius: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+
+    <div className="dashboard-layout">
+      {/* Top Responsive Navbar */}
+      <nav className="dashboard-nav glass-card" style={{ border: '1px solid rgba(129, 140, 248, 0.25)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+        <div className="brand-header-box" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ background: 'linear-gradient(135deg, #6366f1, #ec4899)', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(99, 102, 241, 0.4)' }}>
-            <Video size={24} color="#fff" />
+            <Video size={22} color="#fff" />
           </div>
           <div>
-            <span style={{ fontSize: '1.25rem', fontWeight: 800, background: 'linear-gradient(135deg, #fff, #a5b4fc)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.02em' }}>
-              OmniCall Workspace
-            </span>
+            <div className="brand-title">OmniCall Workspace</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-              <Radio size={12} color="#10b981" /> Real-Time WebRTC Suite
+              <Radio size={12} color="#10b981" /> Real-Time WebRTC Platform
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          {isAdmin && (
-            <button
-              className="btn-outline"
-              onClick={handleOpenAdminDirectory}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'rgba(236, 72, 153, 0.5)', color: '#f472b6', background: 'rgba(236, 72, 153, 0.1)', padding: '8px 14px', borderRadius: '10px', fontSize: '0.8125rem', fontWeight: 600 }}
-            >
-              <Users size={16} /> User Directory
-            </button>
-          )}
+        <div className="user-badge">
+          <button
+            className="btn-outline"
+            onClick={handleOpenAdminDirectory}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'rgba(236, 72, 153, 0.5)', color: '#f472b6', background: 'rgba(236, 72, 153, 0.1)', fontWeight: 600 }}
+          >
+            <Users size={15} /> User Directory
+          </button>
+
 
           <button
             className="btn-outline"
             onClick={() => setShowProfileModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px', fontSize: '0.8125rem', borderColor: 'rgba(99, 102, 241, 0.4)', color: '#a5b4fc' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'rgba(99, 102, 241, 0.4)', color: '#a5b4fc' }}
           >
-            <UserCheck size={16} /> Profile (@{user.username || 'user'})
+            <UserCheck size={15} /> Profile (@{user.username || 'user'})
           </button>
 
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#fff' }}>{user.name}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{user.email}</div>
-          </div>
-
-          <button className="btn-outline" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px', fontSize: '0.8125rem' }}>
-            <LogOut size={16} /> Logout
+          <button className="btn-outline" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'rgba(239,68,68,0.3)', color: '#fca5a5' }}>
+            <LogOut size={15} /> Logout
           </button>
         </div>
       </nav>
 
       {/* Quick Stat Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '28px' }}>
-        <div className="glass-card" style={{ padding: '20px', borderRadius: '14px', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', fontWeight: 600 }}>ACTIVE ROOMS</span>
+      <div className="dash-stats">
+        <div className="glass-card" style={{ padding: '18px', borderRadius: '14px', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>ACTIVE ROOMS</span>
             <Video size={18} color="#818cf8" />
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff' }}>{rooms.length}</div>
           <div style={{ fontSize: '0.75rem', color: '#a5b4fc', marginTop: '4px' }}>Ready for Instant Video Calls</div>
         </div>
 
-        <div className="glass-card" style={{ padding: '20px', borderRadius: '14px', border: '1px solid rgba(236, 72, 153, 0.2)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', fontWeight: 600 }}>MEDIA CLIPS</span>
+        <div className="glass-card" style={{ padding: '18px', borderRadius: '14px', border: '1px solid rgba(236, 72, 153, 0.2)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>MEDIA CLIPS</span>
             <Film size={18} color="#ec4899" />
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff' }}>{clips.length}</div>
-          <div style={{ fontSize: '0.75rem', color: '#f472b6', marginTop: '4px' }}>Uploaded & Streamable</div>
+          <div style={{ fontSize: '0.75rem', color: '#f472b6', marginTop: '4px' }}>Cloudinary CDN Streamable</div>
+        </div>
+
+        <div className="glass-card" style={{ padding: '18px', borderRadius: '14px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>ROOM MEMORIES</span>
+            <Camera size={18} color="#10b981" />
+          </div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff' }}>{memories.length}</div>
+          <div style={{ fontSize: '0.75rem', color: '#6ee7b7', marginTop: '4px' }}>Saved Call Snapshots</div>
         </div>
       </div>
 
@@ -340,18 +336,18 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
       {error && <div className="error-banner" style={{ marginBottom: '20px', borderRadius: '12px' }}>{error}</div>}
       {success && <div className="error-banner" style={{ background: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.4)', color: '#6ee7b7', marginBottom: '20px', borderRadius: '12px' }}>{success}</div>}
 
-      {/* Main Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px' }}>
+      {/* Main Grid: Video Rooms + Media Injector */}
+      <div className="dash-sections">
         {/* Video Rooms Box */}
-        <div className="glass-card" style={{ padding: '24px', borderRadius: '16px', border: '1px solid rgba(129, 140, 248, 0.2)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div className="glass-card section-box" style={{ border: '1px solid rgba(129, 140, 248, 0.2)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 700, color: '#fff' }}>
               <Video size={20} color="#818cf8" /> Your Video Rooms
             </div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Unique Room Names Enforced</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Unique Names Enforced</span>
           </div>
 
-          <form onSubmit={handleCreateRoom} style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
+          <form onSubmit={handleCreateRoom} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
             <input
               className="form-control"
               placeholder="Create new unique room name..."
@@ -361,7 +357,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
               style={{ borderRadius: '10px' }}
             />
             <button type="submit" className="btn-primary" style={{ width: 'auto', padding: '0 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', background: 'linear-gradient(135deg, #6366f1, #4f46e5)' }}>
-              <Plus size={18} /> Create Room
+              <Plus size={18} /> Create
             </button>
           </form>
 
@@ -375,13 +371,13 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
                 <div
                   key={room.id}
                   style={{
-                    padding: '16px',
+                    padding: '14px',
                     borderRadius: '12px',
                     background: 'rgba(255, 255, 255, 0.03)',
                     border: '1px solid rgba(255, 255, 255, 0.08)',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '12px',
+                    gap: '10px',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -448,65 +444,91 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
         </div>
 
         {/* Server Media Library Box */}
-        <div className="glass-card" style={{ padding: '24px', borderRadius: '16px', border: '1px solid rgba(236, 72, 153, 0.2)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div className="glass-card section-box" style={{ border: '1px solid rgba(236, 72, 153, 0.2)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 700, color: '#fff' }}>
               <Film size={20} color="#ec4899" /> Media Library Injector
             </div>
+            {clips.length > 0 && (
+              <button
+                type="button"
+                onClick={handleDeleteAllClips}
+                style={{ background: 'transparent', color: '#f87171', border: 'none', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Trash2 size={12} /> Clear All
+              </button>
+            )}
           </div>
 
-          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-            Upload Images (PNG, JPG), Videos (MP4), or Audio (MP3). Stream them directly into your call tile or broadcast to the shared Presentation Stage!
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
+            Upload Images (PNG, JPG), Videos (MP4), or Audio (MP3) up to 100MB to stream directly into your call tile!
           </p>
 
-          <form onSubmit={handleUploadClip} style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mp3,audio/wav"
-              className="form-control"
-              style={{ fontSize: '0.8125rem', padding: '6px', borderRadius: '10px' }}
-              onChange={(e) => setSelectedFile(e.target.files[0])}
-            />
-            <button type="submit" className="btn-primary" disabled={!selectedFile || uploading} style={{ width: 'auto', padding: '0 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', background: 'linear-gradient(135deg, #ec4899, #818cf8)' }}>
-              <Upload size={16} /> {uploading ? 'Uploading...' : 'Upload File'}
-            </button>
+          <form onSubmit={handleUploadClip} style={{ marginBottom: '16px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mp3,audio/wav"
+                className="form-control"
+                style={{ fontSize: '0.8125rem', padding: '6px', borderRadius: '10px', flex: 1 }}
+                onChange={handleFileSelect}
+              />
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={!selectedFile || uploading}
+                style={{ width: 'auto', padding: '8px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', background: 'linear-gradient(135deg, #ec4899, #818cf8)' }}
+              >
+                <Upload size={16} /> {uploading ? 'Uploading...' : 'Upload'}
+              </button>
+            </div>
+
+            {/* Instant Upload Preview Card */}
+            {previewUrl && selectedFile && (
+              <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(0,0,0,0.4)', borderRadius: '10px', border: '1px solid rgba(236, 72, 153, 0.3)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {selectedFile.type.startsWith('image/') ? (
+                  <img src={previewUrl} alt="Preview" style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '6px' }} />
+                ) : (
+                  <video src={previewUrl} style={{ width: '60px', height: '45px', objectFit: 'cover', borderRadius: '6px' }} />
+                )}
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                    {selectedFile.name}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#ec4899' }}>
+                    {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • Ready to upload
+                  </div>
+                </div>
+              </div>
+            )}
           </form>
 
           {clips.length === 0 ? (
             <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No media uploaded yet.</p>
           ) : (
-            <div style={{ maxHeight: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {clips.map((clip) => {
                 const isCloudinary = clip.storageProvider === 'cloudinary';
-                const isR2 = clip.storageProvider === 'r2';
                 return (
-                  <div key={clip.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                    <div>
-                      <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div key={clip.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <div style={{ overflow: 'hidden', marginRight: '8px' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {clip.name}
-                        {isCloudinary ? (
-                          <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.4)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                            <Cloud size={10} /> Cloudinary CDN
-                          </span>
-                        ) : isR2 ? (
-                          <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.4)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                            <Cloud size={10} /> Cloudflare R2
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(156, 163, 175, 0.2)', color: '#d1d5db', border: '1px solid rgba(156, 163, 175, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                            <HardDrive size={10} /> Local Storage
+                        {isCloudinary && (
+                          <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.4)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <Cloud size={9} /> Cloudinary CDN
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>{clip.mimeType} • {clip.status}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>{clip.mimeType} • {clip.status}</div>
                     </div>
 
                     <button
                       className="btn-outline"
                       onClick={() => handleDeleteClip(clip.id)}
-                      style={{ padding: '6px 10px', borderRadius: '8px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                      style={{ padding: '4px 8px', borderRadius: '6px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 );
@@ -514,6 +536,73 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
             </div>
           )}
         </div>
+      </div>
+
+      {/* ─── 📸 Room Memories & Snapshots Block ─── */}
+      <div className="glass-card section-box" style={{ border: '1px solid rgba(16, 185, 129, 0.25)', marginTop: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 700, color: '#fff' }}>
+            <Camera size={20} color="#10b981" /> 📸 Room Memories & Call Snapshots
+          </div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{memories.length} Moments Saved</span>
+        </div>
+
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+          Snapshots and memory pictures captured during video meetings are saved here in full high-resolution for your account.
+        </p>
+
+        {loadingMemories ? (
+          <p style={{ color: 'var(--text-muted)' }}>Loading your saved memories...</p>
+        ) : memories.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '28px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            No memories saved yet! When you take a snapshot in a call, click <strong>"Save to Memories"</strong> to preserve the moment here.
+          </div>
+        ) : (
+          <div className="memories-grid">
+            {memories.map((mem) => (
+              <div key={mem.id} className="memory-card">
+                <img
+                  src={mem.mediaUrl}
+                  alt={mem.caption}
+                  className="memory-img"
+                  onClick={() => setSelectedMemoryView(mem)}
+                  style={{ cursor: 'pointer' }}
+                />
+                <div className="memory-footer">
+                  <div style={{ overflow: 'hidden', marginRight: '8px' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {mem.caption || mem.roomName}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                      {new Date(mem.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <a
+                      href={mem.mediaUrl}
+                      download={`omnicall-memory-${mem.id}.png`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn-outline"
+                      style={{ padding: '4px 6px', borderRadius: '6px', color: '#818cf8', display: 'flex', alignItems: 'center' }}
+                      title="Download Image"
+                    >
+                      <Download size={13} />
+                    </a>
+                    <button
+                      onClick={() => handleDeleteMemory(mem.id)}
+                      className="btn-outline"
+                      style={{ padding: '4px 6px', borderRadius: '6px', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center' }}
+                      title="Delete Memory"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* User Profile Edit Modal */}
@@ -573,44 +662,96 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
       {/* Admin User Directory Modal */}
       {showAdminDirectory && (
         <div className="modal-backdrop" style={{ zIndex: 1000 }}>
-          <div className="glass-card modal-box" style={{ width: '560px', padding: '24px', borderRadius: '16px' }}>
+          <div className="glass-card modal-box" style={{ width: '600px', maxWidth: '94vw', padding: '24px', borderRadius: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.125rem', color: '#f472b6' }}>
-                <Shield size={20} /> Registered Accounts Directory (Admin Only)
+                <Shield size={20} /> Registered Accounts Directory ({adminUsersList.length})
               </div>
               <button onClick={() => setShowAdminDirectory(false)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
                 <X size={18} />
               </button>
             </div>
 
+            <div style={{ position: 'relative', marginBottom: '16px' }}>
+              <input
+                className="form-control"
+                placeholder="Search registered accounts by name, username, or email..."
+                value={adminSearch}
+                onChange={(e) => setAdminSearch(e.target.value)}
+                style={{ paddingLeft: '34px', fontSize: '0.85rem' }}
+              />
+              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            </div>
+
             {loadingAdminUsers ? (
               <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>Loading accounts database...</p>
             ) : (
               <div style={{ maxHeight: '340px', overflowY: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                      <th style={{ padding: '10px' }}>Name</th>
-                      <th style={{ padding: '10px' }}>Username / Email</th>
-                      <th style={{ padding: '10px' }}>Role</th>
+                      <th style={{ padding: '8px' }}>Name</th>
+                      <th style={{ padding: '8px' }}>Username / Email</th>
+                      <th style={{ padding: '8px' }}>Role</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {adminUsersList.map((u) => (
-                      <tr key={u.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                        <td style={{ padding: '10px', fontWeight: 600, color: '#fff' }}>{u.name}</td>
-                        <td style={{ padding: '10px', color: '#a5b4fc' }}>{u.username ? `@${u.username}` : u.email}</td>
-                        <td style={{ padding: '10px' }}>
-                          <span style={{ fontSize: '0.75rem', background: u.role === 'admin' ? 'rgba(236,72,153,0.2)' : 'rgba(255,255,255,0.1)', color: u.role === 'admin' ? '#f472b6' : 'var(--text-muted)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
-                            {u.role}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {adminUsersList
+                      .filter((u) => {
+                        const s = adminSearch.toLowerCase();
+                        return (
+                          !s ||
+                          u.name?.toLowerCase().includes(s) ||
+                          u.username?.toLowerCase().includes(s) ||
+                          u.email?.toLowerCase().includes(s)
+                        );
+                      })
+                      .map((u) => (
+                        <tr key={u.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          <td style={{ padding: '8px', fontWeight: 600, color: '#fff' }}>{u.name}</td>
+                          <td style={{ padding: '8px', color: '#a5b4fc' }}>{u.username ? `@${u.username}` : u.email}</td>
+                          <td style={{ padding: '8px' }}>
+                            <span style={{ fontSize: '0.7rem', background: u.role === 'admin' ? 'rgba(236,72,153,0.2)' : 'rgba(255,255,255,0.1)', color: u.role === 'admin' ? '#f472b6' : 'var(--text-muted)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                              {u.role}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Memory Viewer Modal */}
+      {selectedMemoryView && (
+        <div className="modal-backdrop" style={{ zIndex: 1200 }} onClick={() => setSelectedMemoryView(null)}>
+          <div className="glass-card modal-box" style={{ maxWidth: '850px', width: '92vw', padding: '16px', borderRadius: '16px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ fontWeight: 700, color: '#fff' }}>{selectedMemoryView.caption || selectedMemoryView.roomName}</div>
+              <button onClick={() => setSelectedMemoryView(null)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
+                <X size={20} />
+              </button>
+            </div>
+            <img
+              src={selectedMemoryView.mediaUrl}
+              alt="Memory Fullscreen"
+              style={{ width: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '10px' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+              <a
+                href={selectedMemoryView.mediaUrl}
+                download={`omnicall-memory-${selectedMemoryView.id}.png`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-primary"
+                style={{ width: 'auto', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
+              >
+                <Download size={15} /> Download High-Res PNG
+              </a>
+            </div>
           </div>
         </div>
       )}
@@ -710,3 +851,4 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
     </div>
   );
 }
+

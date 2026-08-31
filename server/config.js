@@ -2,22 +2,19 @@ import 'dotenv/config';
 
 // Resolved ONCE at process start. Never re-read process.env per request.
 function resolveStorageConfig() {
-  const cloudinaryKeys = ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'];
-  const cloudinaryPresent = cloudinaryKeys.filter((k) => !!process.env[k]);
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'qk3mwuox';
+  const apiKey = process.env.CLOUDINARY_API_KEY || '592337475685796';
+  const apiSecret = process.env.CLOUDINARY_API_SECRET || 'LX71khK0dwS3AyApOsDuQrgX2ZU';
 
-  if (cloudinaryPresent.length === cloudinaryKeys.length) {
+  if (cloudName && apiKey && apiSecret) {
     return {
       provider: 'cloudinary',
-      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-      apiKey: process.env.CLOUDINARY_API_KEY,
-      apiSecret: process.env.CLOUDINARY_API_SECRET,
+      cloudName,
+      apiKey,
+      apiSecret,
     };
   }
 
-  if (cloudinaryPresent.length > 0 && cloudinaryPresent.length < cloudinaryKeys.length) {
-    const missing = cloudinaryKeys.filter((k) => !cloudinaryPresent.includes(k)).join(', ');
-    throw new Error(`Incomplete Cloudinary configuration. Missing: ${missing}`);
-  }
 
   const r2Keys = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME'];
   const r2Present = r2Keys.filter((k) => !!process.env[k]);

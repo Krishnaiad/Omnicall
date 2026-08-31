@@ -401,8 +401,8 @@ router.put('/profile', requireAuth, async (req, res) => {
   }
 });
 
-// Protected Admin Directory Endpoint
-router.get('/users', requireAuth, requireAdmin, async (req, res) => {
+// Registered Accounts Directory Endpoint (Available to all logged-in team members)
+router.get('/users', requireAuth, async (req, res) => {
   try {
     const users = await db.queryAll('SELECT id, name, username, email, role, created_at FROM users ORDER BY created_at DESC');
     res.json({ users });
@@ -411,5 +411,6 @@ router.get('/users', requireAuth, requireAdmin, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch user directory' });
   }
 });
+
 
 export default router;

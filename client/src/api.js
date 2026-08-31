@@ -282,5 +282,37 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ guestName }),
     }),
+
+  endMeeting: (token, roomId) =>
+    request(`/api/rooms/${roomId}/end-meeting`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  deleteAllClips: (token) =>
+    request('/api/media/all', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  // ─── Room Memories & Snapshots Gallery ────────────────────────────────────
+  getMemories: (token) =>
+    request('/api/memories', {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  saveMemory: (token, memoryData) =>
+    request('/api/memories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(memoryData),
+    }),
+
+  deleteMemory: (token, memoryId) =>
+    request(`/api/memories/${memoryId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
 };
+
 

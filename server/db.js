@@ -245,6 +245,17 @@ const TABLE_STATEMENTS = [
     expires_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+  // room_memories: Stores personal snapshots and moments captured during calls
+  `CREATE TABLE IF NOT EXISTS room_memories (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    room_id TEXT,
+    room_name TEXT,
+    media_url TEXT NOT NULL,
+    thumbnail_url TEXT,
+    caption TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
 ];
 
 // Migration: add column if missing (safe for both SQLite and Postgres)

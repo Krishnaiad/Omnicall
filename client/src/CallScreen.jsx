@@ -230,9 +230,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         const data = JSON.parse(decoder.decode(payload));
 
         if (topic === 'meeting-control') {
-          if (data.type === 'MEETING_ENDED') {
-            setToastNotice(`⚠️ The meeting was ended for everyone by ${data.endedBy}.`);
-            setTimeout(() => onLeave(), 2500);
+          if (data.type === 'MEETING_ENDED' || data.type === 'ROOM_TERMINATED_BY_HOST') {
+            setToastNotice('🚨 The room creator has ended this meeting.');
+            setTimeout(() => onLeave(), 1500);
           } else if (data.type === 'SNAPSHOT_TAKEN') {
             setToastNotice(`📸 Room Memory Snapshot captured by ${data.takenBy}!`);
             setTimeout(() => setToastNotice(null), 4500);
@@ -243,6 +243,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           } else if (data.type === 'PRESENTATION_MEDIA') {
             setSharedMedia(data.media);
             if (!data.media) setIsSharingScreen(false);
+          } else if (data.type === 'PRESENTATION_STOPPED') {
+            setSharedMedia(null);
           }
         } else if (topic === 'screen-share-perm') {
           if (data.type === 'REQUEST' && isOwner && participant.identity !== user.id) {
@@ -378,16 +380,32 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     setShowRenameModal(false);
   };
 
-  const handleTakeSnapshot = () => {
+  const handleTakeSnapshot = async () => {
     if (!isOwner) {
       setToastNotice('⚠️ Only the room creator/owner can capture memory snapshots.');
       setTimeout(() => setToastNotice(null), 3000);
       return;
     }
 
-    captureRoomSnapshot(roomData.name);
+    const dataUrl = await captureRoomSnapshot(roomData.name);
     sendDataPacket({ type: 'SNAPSHOT_TAKEN', takenBy: displayName }, 'meeting-control');
+
+    if (dataUrl) {
+      setToastNotice('📸 Snapshot captured & saved to your Room Memories!');
+      setTimeout(() => setToastNotice(null), 4000);
+      try {
+        await api.saveMemory(token, {
+          roomId: roomData.id,
+          roomName: roomData.name,
+          mediaUrl: dataUrl,
+          caption: `Snapshot from ${roomData.name}`,
+        });
+      } catch (err) {
+        console.warn('Auto-save memory notice:', err.message);
+      }
+    }
   };
+
 
   const handleSharePresentation = (mediaUrl, mediaName, mediaType) => {
     const mediaObj = { mediaUrl, mediaName, mediaType, presenterName: displayName };
@@ -475,10 +493,16 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     }
   };
 
-  const handleEndMeetingForAll = () => {
-    sendDataPacket({ type: 'MEETING_ENDED', endedBy: displayName }, 'meeting-control');
+  const handleEndMeetingForAll = async () => {
+    sendDataPacket({ type: 'ROOM_TERMINATED_BY_HOST', endedBy: displayName }, 'meeting-control');
+    try {
+      await api.endMeeting(token, roomData.id);
+    } catch (err) {
+      console.warn('End meeting API error:', err.message);
+    }
     onLeave();
   };
+
 
   // Picture-in-Picture (PiP) Mode Handler
   const togglePiP = async () => {
@@ -576,8 +600,12 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           <PresentationStage
             media={sharedMedia}
             isPresenter={isPresenter}
+            token={token}
+            roomId={roomData.id}
+            roomName={roomData.name}
             onStopPresentation={handleStopPresentation}
           />
+
 
           {/* Double-Clicked Spotlight / Pinned Hero Video Stage */}
           {pinnedTrack && (
@@ -663,9 +691,11 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             room={roomRef.current}
             roomId={roomData.id}
             isHost={isOwner}
+            videoTracks={videoTracks}
             onClose={() => setShowWhiteboard(false)}
           />
         )}
+
 
         {showPolls && (
           <PollsPanel
