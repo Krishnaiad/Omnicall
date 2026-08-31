@@ -101,32 +101,47 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
     fetchClips();
     fetchMemories();
 
-    const sseUrl = `${api.BASE_URL}/api/notifications/stream?token=${encodeURIComponent(token)}`;
-    const es = new EventSource(sseUrl);
-    eventSourceRef.current = es;
+    let es = null;
+    try {
+      if (token) {
+        const sseUrl = `${api.BASE_URL}/api/notifications/stream?token=${encodeURIComponent(token)}`;
+        es = new EventSource(sseUrl);
+        eventSourceRef.current = es;
 
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'ROOM_INVITED') {
-          setInviteNotice(`🎉 ${data.invitedBy} invited you to room: "${data.roomName}"!`);
-          fetchRooms();
-          setTimeout(() => setInviteNotice(null), 6000);
-        }
-      } catch (err) {
-        console.warn('SSE message parse error:', err);
+        es.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'ROOM_INVITED') {
+              setInviteNotice(`🎉 ${data.invitedBy} invited you to room: "${data.roomName}"!`);
+              fetchRooms();
+              setTimeout(() => setInviteNotice(null), 6000);
+            }
+          } catch (err) {
+            console.warn('SSE message parse error:', err);
+          }
+        };
+
+        es.onerror = () => {
+          // Gracefully close on error to avoid mobile browser exceptions
+          try { es?.close(); } catch (_) {}
+        };
       }
-    };
+    } catch (sseErr) {
+      console.warn('SSE initialization note:', sseErr);
+    }
 
     const interval = setInterval(() => {
       fetchRooms();
     }, 15000);
 
     return () => {
-      es.close();
+      if (es) {
+        try { es.close(); } catch (_) {}
+      }
       clearInterval(interval);
     };
-  }, [token, user.id]);
+  }, [token, user?.id]);
+
 
   useEffect(() => {
     if (error) {
