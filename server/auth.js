@@ -13,13 +13,27 @@ function getSecret() {
   return secret;
 }
 
-export function signToken(user) {
+// 15-minute Short-Lived Access Token (Enterprise Grade Security)
+export function signAccessToken(user) {
   return jwt.sign(
-    { sub: user.id, email: user.email, name: user.name, username: user.username, role: user.role || 'user' },
+    { sub: user.id, email: user.email, name: user.name, username: user.username, role: user.role || 'user', type: 'access' },
+    getSecret(),
+    { expiresIn: '15m' }
+  );
+}
+
+// 7-day Refresh Token (Silent Background Session Renewal)
+export function signRefreshToken(user) {
+  return jwt.sign(
+    { sub: user.id, type: 'refresh' },
     getSecret(),
     { expiresIn: '7d' }
   );
 }
+
+// Backwards-compatible alias
+export const signToken = signAccessToken;
+
 
 router.post('/register', async (req, res) => {
   try {
@@ -59,7 +73,9 @@ router.post('/register', async (req, res) => {
     );
 
     const user = { id, email: normalizedEmail, name: name.trim(), username: assignedUsername, role: assignedRole };
-    res.status(201).json({ token: signToken(user), user });
+    const accessToken = signAccessToken(user);
+    const refreshToken = signRefreshToken(user);
+    res.status(201).json({ token: accessToken, refreshToken, user });
   } catch (err) {
     console.error('Register failed:', err);
     res.status(500).json({ error: 'Registration failed' });
@@ -82,12 +98,50 @@ router.post('/login', async (req, res) => {
     }
 
     const user = { id: row.id, email: row.email, name: row.name, username: row.username, role: row.role || 'user' };
-    res.json({ token: signToken(user), user });
+    const accessToken = signAccessToken(user);
+    const refreshToken = signRefreshToken(user);
+    res.json({ token: accessToken, refreshToken, user });
   } catch (err) {
     console.error('Login failed:', err);
     res.status(500).json({ error: 'Login failed' });
   }
 });
+
+// Silent Background Token Renewal Endpoint
+router.post('/refresh', async (req, res) => {
+  const { refreshToken } = req.body || {};
+  if (!refreshToken) {
+    return res.status(400).json({ error: 'Refresh token is required' });
+  }
+
+  try {
+    const payload = jwt.verify(refreshToken, getSecret());
+    if (payload.type !== 'refresh' || !payload.sub) {
+      return res.status(401).json({ error: 'Invalid refresh token' });
+    }
+
+    const userRow = await db.queryGet('SELECT id, email, name, username, role FROM users WHERE id = ?', [payload.sub]);
+    if (!userRow) {
+      return res.status(401).json({ error: 'User account not found' });
+    }
+
+    const user = {
+      id: userRow.id,
+      email: userRow.email,
+      name: userRow.name,
+      username: userRow.username,
+      role: userRow.role || 'user',
+    };
+
+    const newAccessToken = signAccessToken(user);
+    const newRefreshToken = signRefreshToken(user);
+
+    res.json({ token: newAccessToken, refreshToken: newRefreshToken, user });
+  } catch {
+    return res.status(401).json({ error: 'Expired or invalid refresh token' });
+  }
+});
+
 
 export function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
@@ -149,7 +203,12 @@ router.put('/profile', requireAuth, async (req, res) => {
       role: req.user.role,
     };
 
-    res.json({ ok: true, user: updatedUser, token: signToken(updatedUser) });
+    res.json({
+      ok: true,
+      user: updatedUser,
+      token: signAccessToken(updatedUser),
+      refreshToken: signRefreshToken(updatedUser),
+    });
   } catch (err) {
     console.error('Update profile failed:', err);
     res.status(500).json({ error: 'Failed to update profile' });

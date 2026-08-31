@@ -146,7 +146,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
       if (!res.ok) throw new Error(data.error || 'Failed to update profile');
 
       setSuccess('Profile updated successfully!');
-      if (onUserUpdate) onUserUpdate(data.user, data.token);
+      if (onUserUpdate) onUserUpdate(data.user, data.token, data.refreshToken);
       setShowProfileModal(false);
     } catch (err) {
       setError(err.message);

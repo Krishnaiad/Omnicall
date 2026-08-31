@@ -1,9 +1,66 @@
 const BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
 
-async function request(endpoint, options = {}) {
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+function subscribeTokenRefresh(cb) {
+  refreshSubscribers.push(cb);
+}
+
+function onRefreshed(token) {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+}
+
+async function request(endpoint, options = {}, isRetry = false) {
   const url = `${BASE_URL}${endpoint}`;
-  const response = await fetch(url, options);
-  const data = await response.json().catch(() => ({}));
+  let response = await fetch(url, options);
+  let data = await response.json().catch(() => ({}));
+
+  // If access token expired (15m elapsed), silently renew using refresh token and retry
+  if (response.status === 401 && !isRetry && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/register') && !endpoint.includes('/auth/refresh')) {
+    const refreshToken = localStorage.getItem('omnicall_refresh_token');
+    if (refreshToken) {
+      if (!isRefreshing) {
+        isRefreshing = true;
+        try {
+          const refreshRes = await fetch(`${BASE_URL}/api/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+          });
+          const refreshData = await refreshRes.json().catch(() => ({}));
+
+          if (refreshRes.ok && refreshData.token) {
+            localStorage.setItem('omnicall_token', refreshData.token);
+            if (refreshData.refreshToken) {
+              localStorage.setItem('omnicall_refresh_token', refreshData.refreshToken);
+            }
+            if (refreshData.user) {
+              localStorage.setItem('omnicall_user', JSON.stringify(refreshData.user));
+            }
+            isRefreshing = false;
+            onRefreshed(refreshData.token);
+          } else {
+            isRefreshing = false;
+            localStorage.removeItem('omnicall_token');
+            localStorage.removeItem('omnicall_refresh_token');
+            localStorage.removeItem('omnicall_user');
+            window.location.reload();
+            throw new Error('Session expired. Please log in again.');
+          }
+        } catch (err) {
+          isRefreshing = false;
+          throw err;
+        }
+      }
+
+      // Retry original request with newly refreshed access token
+      const newToken = await new Promise((resolve) => subscribeTokenRefresh(resolve));
+      const retryHeaders = { ...(options.headers || {}), Authorization: `Bearer ${newToken}` };
+      return request(endpoint, { ...options, headers: retryHeaders }, true);
+    }
+  }
 
   if (!response.ok) {
     throw new Error(data.error || `Request failed with status ${response.status}`);
@@ -14,6 +71,14 @@ async function request(endpoint, options = {}) {
 
 export const api = {
   BASE_URL,
+
+  refreshToken: (refreshToken) =>
+    request('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    }),
+
 
   register: (email, password, name) =>
     request('/api/auth/register', {

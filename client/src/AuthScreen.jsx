@@ -22,7 +22,7 @@ export default function AuthScreen({ onAuthSuccess }) {
       } else {
         data = await api.register(email, password, name);
       }
-      onAuthSuccess(data.token, data.user);
+      onAuthSuccess(data.token, data.user, data.refreshToken);
     } catch (err) {
       setError(err.message);
     } finally {

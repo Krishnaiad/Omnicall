@@ -21,19 +21,25 @@ export default function App() {
   const [inRoomNickname, setInRoomNickname] = useState('');
   const [joining, setJoining] = useState(false);
 
-  const handleAuthSuccess = (newToken, newUser) => {
+  const handleAuthSuccess = (newToken, newUser, refreshToken) => {
     setToken(newToken);
     setUser(newUser);
     localStorage.setItem('omnicall_token', newToken);
+    if (refreshToken) {
+      localStorage.setItem('omnicall_refresh_token', refreshToken);
+    }
     localStorage.setItem('omnicall_user', JSON.stringify(newUser));
   };
 
-  const handleUserUpdate = (newUser, newToken) => {
+  const handleUserUpdate = (newUser, newToken, newRefreshToken) => {
     setUser(newUser);
     localStorage.setItem('omnicall_user', JSON.stringify(newUser));
     if (newToken) {
       setToken(newToken);
       localStorage.setItem('omnicall_token', newToken);
+    }
+    if (newRefreshToken) {
+      localStorage.setItem('omnicall_refresh_token', newRefreshToken);
     }
   };
 
@@ -43,8 +49,10 @@ export default function App() {
     setActiveRoom(null);
     setRoomToken(null);
     localStorage.removeItem('omnicall_token');
+    localStorage.removeItem('omnicall_refresh_token');
     localStorage.removeItem('omnicall_user');
   };
+
 
   const handleJoinCall = async (room, customNickname) => {
     setJoining(true);
