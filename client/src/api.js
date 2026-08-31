@@ -13,6 +13,8 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  BASE_URL,
+
   register: (email, password, name) =>
     request('/api/auth/register', {
       method: 'POST',
@@ -82,6 +84,21 @@ export const api = {
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ displayName }),
+    }),
+
+  getRoomMessages: (token, roomId) =>
+    request(`/api/rooms/${roomId}/messages`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  sendRoomMessage: (token, roomId, id, text) =>
+    request(`/api/rooms/${roomId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ id, text }),
     }),
 
   listClips: (token) =>

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
@@ -21,10 +22,22 @@ let sqliteDb = null;
 
 if (DATABASE_URL) {
   isPg = true;
+  const sslOptions = process.env.PG_SSL_CA
+    ? { ca: process.env.PG_SSL_CA, rejectUnauthorized: true }
+    : { rejectUnauthorized: false };
+
   pool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
+    ssl: sslOptions,
+    statement_timeout: 15000,
+    idle_in_transaction_session_timeout: 30000,
+    max: Number(process.env.PG_POOL_MAX || 10),
   });
+
+  pool.on('error', (err) => {
+    console.error('[DB Pool Error] Unexpected idle client error:', err.message);
+  });
+
   console.log('[DB] Connecting to PostgreSQL Cloud Database...');
 } else {
   const dbPath = path.resolve(process.env.DATABASE_PATH || './data.sqlite');
@@ -34,7 +47,23 @@ if (DATABASE_URL) {
   console.log('[DB] Running on Local SQLite Database...');
 }
 
+export async function connectWithBackoff(maxAttempts = 5) {
+  if (!isPg || !pool) return;
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      await pool.query('SELECT 1');
+      return;
+    } catch (err) {
+      if (i === maxAttempts - 1) throw err;
+      const delay = Math.min(1000 * 2 ** i, 15000);
+      console.warn(`[DB] Connect failed, retrying in ${delay}ms:`, err.message);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
+
 export const db = {
+  isPg: () => isPg,
   exec: async (sql) => {
     if (isPg) {
       return pool.query(sql);
@@ -102,58 +131,89 @@ export const db = {
   },
 };
 
-// Initialize Tables & Add Missing Columns
-async function initTables() {
-  const createTablesSql = `
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      email TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      name TEXT NOT NULL,
-      username TEXT UNIQUE,
-      role TEXT DEFAULT 'user',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+// Individual CREATE TABLE statements — split for Postgres compatibility
+const TABLE_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
+    username TEXT UNIQUE,
+    role TEXT DEFAULT 'user',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS rooms (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS room_members (
+    room_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    role TEXT DEFAULT 'member',
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (room_id, user_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL,
+    sender_id TEXT NOT NULL,
+    sender_name TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS media_files (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    storage_provider TEXT DEFAULT 'local',
+    storage_key TEXT,
+    public_url TEXT,
+    status TEXT DEFAULT 'ready',
+    duration REAL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  // live_sessions: tracks who is ACTIVELY in a call right now (separate from permanent room_members)
+  // Used by LiveKit webhook handler to reconcile SFU state with DB — eliminates zombie rows
+  `CREATE TABLE IF NOT EXISTS live_sessions (
+    id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL,
+    room_name TEXT,
+    participant_identity TEXT NOT NULL,
+    participant_name TEXT,
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    left_at TIMESTAMP,
+    disconnect_reason TEXT,
+    UNIQUE (room_id, participant_identity)
+  )`,
+];
 
-    CREATE TABLE IF NOT EXISTS rooms (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_id TEXT NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS room_members (
-      room_id TEXT NOT NULL,
-      user_id TEXT NOT NULL,
-      role TEXT DEFAULT 'member',
-      joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (room_id, user_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS chat_messages (
-      id TEXT PRIMARY KEY,
-      room_id TEXT NOT NULL,
-      sender_id TEXT NOT NULL,
-      sender_name TEXT NOT NULL,
-      message TEXT NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS media_files (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      original_name TEXT NOT NULL,
-      mime_type TEXT NOT NULL,
-      file_path TEXT NOT NULL,
-      status TEXT DEFAULT 'ready',
-      duration REAL DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `;
-
+// Migration: add column if missing (safe for both SQLite and Postgres)
+async function addColumnIfMissing(table, column, type) {
   try {
-    await db.exec(createTablesSql);
-    try { await db.exec('ALTER TABLE users ADD COLUMN username TEXT'); } catch (_) {}
+    if (isPg) {
+      await db.exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ${type}`);
+    } else {
+      // SQLite: attempt ALTER and swallow "duplicate column" error
+      await db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+    }
+  } catch (_) {
+    // Column already exists — safe to ignore
+  }
+}
+
+async function initTables() {
+  try {
+    for (const stmt of TABLE_STATEMENTS) {
+      await db.exec(stmt);
+    }
+    await addColumnIfMissing('users', 'username', 'TEXT');
+    await addColumnIfMissing('media_files', 'storage_provider', "TEXT DEFAULT 'local'");
+    await addColumnIfMissing('media_files', 'storage_key', 'TEXT');
+    await addColumnIfMissing('media_files', 'public_url', 'TEXT');
   } catch (err) {
     console.warn('[DB] Table initialization notice:', err.message);
   }
@@ -161,6 +221,7 @@ async function initTables() {
 
 // Seed Designated Admin Account
 export async function seedAdminUser() {
+  await connectWithBackoff();
   await initTables();
 
   const adminEmail = (process.env.ADMIN_EMAIL || 'admin@omnicall.com').toLowerCase().trim();

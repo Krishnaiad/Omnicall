@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { db, randomUUID } from './db.js';
 import { requireAuth } from './auth.js';
+import { notifyUser } from './notifications.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -140,6 +141,41 @@ router.get('/:roomId/messages', async (req, res) => {
   }
 });
 
+// Save persistent chat message sent during a call
+router.post('/:roomId/messages', async (req, res) => {
+  const { roomId } = req.params;
+  const { id, text } = req.body || {};
+
+  if (!text || !text.trim()) {
+    return res.status(400).json({ error: 'Message text is required' });
+  }
+
+  try {
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+
+    const msgId = id || randomUUID();
+    const sanitized = text.trim().slice(0, 1000);
+
+    await db.queryRun(
+      'INSERT INTO chat_messages (id, room_id, sender_id, sender_name, message) VALUES (?, ?, ?, ?, ?)',
+      [msgId, roomId, req.user.id, req.user.name, sanitized]
+    );
+
+    res.status(201).json({
+      id: msgId,
+      roomId,
+      senderId: req.user.id,
+      senderName: req.user.name,
+      text: sanitized,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Save chat message failed:', err);
+    res.status(500).json({ error: 'Failed to save chat message' });
+  }
+});
+
 // Invite a user by Username OR Email. Owner only.
 router.post('/:roomId/invite', async (req, res) => {
   const { roomId } = req.params;
@@ -168,10 +204,14 @@ router.post('/:roomId/invite', async (req, res) => {
       await db.queryRun('INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, ?)', [roomId, invitee.id, 'member']);
     }
 
-    if (req.app.get('io')) {
-      const io = req.app.get('io');
-      io.emit('room-invited-notice', { inviteeUserId: invitee.id, roomId, roomName: room.name });
-    }
+    // Trigger instant real-time Server-Sent Event (SSE) notification to invitee's Dashboard
+    notifyUser(invitee.id, {
+      type: 'ROOM_INVITED',
+      roomId,
+      roomName: room.name,
+      invitedBy: req.user.name,
+      timestamp: new Date().toISOString(),
+    });
 
     res.json({ ok: true, member: { id: invitee.id, username: invitee.username, email: invitee.email, name: invitee.name } });
   } catch (err) {
@@ -221,7 +261,7 @@ router.delete('/:roomId/leave', async (req, res) => {
   }
 });
 
-// Issue a LiveKit access token — loaded strictly from environment variables
+// Issue a LiveKit access token — role metadata embedded for SFU-side role awareness (Point 9 fix)
 router.post('/:roomId/token', async (req, res) => {
   const { roomId } = req.params;
   const { displayName } = req.body || {};
@@ -236,34 +276,107 @@ router.post('/:roomId/token', async (req, res) => {
     const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
-    const memberCheck = await isMember(roomId, req.user.id);
+    const memberCheck = await db.queryGet(
+      'SELECT role FROM room_members WHERE room_id = ? AND user_id = ?',
+      [roomId, req.user.id]
+    );
     if (!memberCheck) {
       return res.status(403).json({ error: 'You are not a member of this room' });
     }
 
+    const isOwner = room.owner_id === req.user.id;
+    const participantRole = isOwner ? 'owner' : (memberCheck.role || 'member');
     const effectiveName = (displayName && displayName.trim()) ? displayName.trim().slice(0, 50) : req.user.name;
-    const uniqueIdentity = `${req.user.id}_${Date.now()}`;
 
     const at = new AccessToken(apiKey, apiSecret, {
-      identity: uniqueIdentity,
+      identity: req.user.id,
       name: effectiveName,
       ttl: '2h',
+      // Embed role in participant metadata so all SFU clients know the role without querying DB
+      metadata: JSON.stringify({
+        role: participantRole,
+        isHost: isOwner,
+        userId: req.user.id,
+        username: req.user.username || '',
+      }),
     });
 
     at.addGrant({
       roomJoin: true,
       room: roomId,
-      canPublish: true,
+      canPublish: true,       // All members can publish camera/mic/screen
       canSubscribe: true,
-      canPublishData: true,
+      canPublishData: true,   // Required for in-call DataPackets (chat, signals)
     });
 
     const token = await at.toJwt();
-    res.json({ token, roomName: room.name, roomId: room.id, displayName: effectiveName });
+    res.json({ token, roomName: room.name, roomId: room.id, displayName: effectiveName, role: participantRole });
   } catch (err) {
     console.error('Failed to mint call token:', err);
     res.status(500).json({ error: 'Failed to create access token: ' + err.message });
   }
 });
 
+// Reconciliation endpoint — diffs live_sessions (DB) vs LiveKit SFU state (Point 1 fix)
+// Shows who the DB thinks is in the room vs who LiveKit actually reports
+router.get('/:roomId/live-status', async (req, res) => {
+  const { roomId } = req.params;
+  const { apiKey, apiSecret, httpUrl } = getLiveKitCredentials();
+
+  try {
+    const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+
+    // DB perspective: who's in live_sessions with no left_at
+    const dbActiveSessions = await db.queryAll(
+      'SELECT participant_identity, participant_name, joined_at FROM live_sessions WHERE room_id = ? AND left_at IS NULL',
+      [roomId]
+    );
+
+    // LiveKit SFU perspective: who's actually connected right now
+    let livekitParticipants = [];
+    if (apiKey && apiSecret && httpUrl) {
+      try {
+        const { RoomServiceClient } = await import('livekit-server-sdk');
+        const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
+        livekitParticipants = await roomService.listParticipants(roomId);
+      } catch (err) {
+        console.warn('[Reconcile] LiveKit listParticipants failed:', err.message);
+      }
+    }
+
+    const livekitIdentities = new Set(livekitParticipants.map((p) => p.identity));
+    const dbIdentities = new Set(dbActiveSessions.map((s) => s.participant_identity));
+
+    const zombieRows = dbActiveSessions.filter((s) => !livekitIdentities.has(s.participant_identity));
+    const phantomParticipants = livekitParticipants.filter((p) => !dbIdentities.has(p.identity));
+
+    // Auto-close zombie sessions found during reconciliation
+    for (const zombie of zombieRows) {
+      await db.queryRun(
+        'UPDATE live_sessions SET left_at = NOW(), disconnect_reason = ? WHERE room_id = ? AND participant_identity = ? AND left_at IS NULL',
+        ['reconciled_stale', roomId, zombie.participant_identity]
+      ).catch(() => {});
+    }
+
+    res.json({
+      roomId,
+      roomName: room.name,
+      dbActiveSessions: dbActiveSessions.length,
+      livekitActive: livekitParticipants.length,
+      zombieRowsCleaned: zombieRows.length,
+      phantomParticipants: phantomParticipants.length,
+      drift: zombieRows.length + phantomParticipants.length,
+      reconciled: true,
+    });
+  } catch (err) {
+    console.error('Live status reconciliation failed:', err);
+    res.status(500).json({ error: 'Reconciliation failed: ' + err.message });
+  }
+});
+
 export default router;
+

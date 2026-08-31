@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Room, RoomEvent, Track, LocalVideoTrack } from 'livekit-client';
-import { io } from 'socket.io-client';
 import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check, UserPlus, Pin, PinOff } from 'lucide-react';
 import MediaInjector from './MediaInjector.jsx';
 import ChatPanel from './ChatPanel.jsx';
@@ -33,24 +32,30 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin }) {
   const filterCss = filterObj && filterObj.css !== 'none' ? filterObj.css : '';
   let videoFilterStr = filterCss || 'none';
   let videoStyle = { width: '100%', height: '100%', objectFit: 'cover', transition: 'all 0.3s ease' };
-  let containerStyle = { position: 'relative', cursor: 'pointer' };
+  let containerStyle = { position: 'relative', cursor: 'pointer', overflow: 'hidden' };
 
   if (bgObj && bgObj.id !== 'none') {
     if (bgObj.id.startsWith('blur-')) {
-      const blurAmount = bgObj.id === 'blur-deep' ? '18px' : '8px';
+      const blurAmount = bgObj.id === 'blur-deep' ? '25px' : '10px';
       videoFilterStr = filterCss ? `${filterCss} blur(${blurAmount})` : `blur(${blurAmount})`;
-    } else if (bgObj.style && bgObj.style.background) {
+    } else if (bgObj.imgUrl) {
       containerStyle = {
         ...containerStyle,
-        background: bgObj.style.background,
-        padding: '10px',
-        boxShadow: '0 0 30px rgba(99, 102, 241, 0.3)',
+        backgroundImage: `url(${bgObj.imgUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        padding: '12px',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
       };
       videoStyle = {
         ...videoStyle,
-        borderRadius: '10px',
-        border: '2px solid rgba(255, 255, 255, 0.2)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
+        borderRadius: '16px',
+        border: '2px solid rgba(255, 255, 255, 0.3)',
+        boxShadow: '0 12px 36px rgba(0, 0, 0, 0.75)',
+        width: '92%',
+        height: '92%',
       };
     }
   }
@@ -73,7 +78,7 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin }) {
       />
       <div className="tile-overlay" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <span>{displayLabel}</span>
+          <span style={{ fontWeight: 600 }}>{displayLabel}</span>
           {item.isLocal && <span style={{ opacity: 0.7, marginLeft: '4px' }}>(you)</span>}
         </div>
         <button
@@ -124,7 +129,6 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   const [injectingClip, setInjectingClip] = useState(false);
 
   const roomRef = useRef(null);
-  const socketRef = useRef(null);
   const screenTrackRef = useRef(null);
 
   const isOwner = roomData.owner_id === user.id;
@@ -141,62 +145,25 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     setPinnedTrackSid((prev) => (prev === sid ? null : prev));
   }, []);
 
-  // Socket.io connection for chat, snapshots, end-meeting, and display name sync
-  useEffect(() => {
-    const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
-    const socket = io(serverUrl, { auth: { token } });
-    socketRef.current = socket;
+  // Helper to publish Data Packet via LiveKit WebRTC DataChannel
+  const sendDataPacket = useCallback((payload, topic = 'default', destinationIdentities = undefined) => {
+    if (!roomRef.current || !roomRef.current.localParticipant) return;
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(JSON.stringify(payload));
+      roomRef.current.localParticipant.publishData(data, {
+        topic,
+        destinationIdentities,
+      });
+    } catch (err) {
+      console.warn('Failed to send LiveKit DataPacket:', err.message);
+    }
+  }, []);
 
-    socket.on('connect', () => {
-      socket.emit('join-room', { roomId: roomData.id });
-    });
-
-    socket.on('meeting-ended', ({ endedBy }) => {
-      alert(`The meeting was ended for everyone by ${endedBy}.`);
-      onLeave();
-    });
-
-    socket.on('participant-renamed', ({ userId, newDisplayName }) => {
-      setTracks((prev) =>
-        prev.map((t) => (t.identity.startsWith(userId) ? { ...t, name: newDisplayName } : t))
-      );
-    });
-
-    socket.on('snapshot-notification', (data) => {
-      setToastNotice(`📸 Room Memory Snapshot captured by ${data.takenBy}!`);
-      setTimeout(() => setToastNotice(null), 4500);
-    });
-
-    socket.on('presentation-media-changed', (mediaData) => {
-      setSharedMedia(mediaData);
-      if (!mediaData) setIsSharingScreen(false);
-    });
-
-    socket.on('screen-share-request-received', (data) => {
-      if (isOwner && data.requesterUserId !== user.id) {
-        setPendingPermissionRequest(data);
-      }
-    });
-
-    socket.on('screen-share-permission-result', ({ allowed }) => {
-      setRequestSentNotice(false);
-      if (allowed) {
-        setIsScreenShareApproved(true);
-        startNativeScreenShare();
-      } else {
-        alert('The room creator denied your screen share request.');
-      }
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [token, roomData.id, isOwner, user.id, onLeave]);
-
-  // LiveKit connection with URL scheme fallback
+  // LiveKit connection and WebRTC DataPacket event handlers
   useEffect(() => {
     let rawUrl = (import.meta.env.VITE_LIVEKIT_URL || 'wss://omnicall-gfhd6nn2.livekit.cloud').trim();
-    if (!rawUrl || rawUrl.includes('xxxx') || !rawUrl.includes('omnicall-gfhd6nn2')) {
+    if (!rawUrl) {
       rawUrl = 'wss://omnicall-gfhd6nn2.livekit.cloud';
     }
     if (!rawUrl.startsWith('wss://') && !rawUrl.startsWith('ws://')) {
@@ -229,6 +196,91 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       setTracks((prev) => prev.filter((t) => t.identity !== participant.identity));
     });
 
+    // Handle incoming LiveKit DataPackets
+    room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+      try {
+        const decoder = new TextDecoder();
+        const data = JSON.parse(decoder.decode(payload));
+
+        if (topic === 'meeting-control') {
+          if (data.type === 'MEETING_ENDED') {
+            setToastNotice(`⚠️ The meeting was ended for everyone by ${data.endedBy}.`);
+            setTimeout(() => onLeave(), 2500);
+          } else if (data.type === 'SNAPSHOT_TAKEN') {
+            setToastNotice(`📸 Room Memory Snapshot captured by ${data.takenBy}!`);
+            setTimeout(() => setToastNotice(null), 4500);
+          } else if (data.type === 'PARTICIPANT_RENAMED') {
+            setTracks((prev) =>
+              prev.map((t) => (t.identity === data.userId || t.identity.startsWith(data.userId) ? { ...t, name: data.newDisplayName } : t))
+            );
+          } else if (data.type === 'PRESENTATION_MEDIA') {
+            setSharedMedia(data.media);
+            if (!data.media) setIsSharingScreen(false);
+          }
+        } else if (topic === 'screen-share-perm') {
+          if (data.type === 'REQUEST' && isOwner && participant.identity !== user.id) {
+            setPendingPermissionRequest({
+              requesterUserId: participant.identity,
+              requesterName: data.requesterName,
+            });
+          } else if (data.type === 'RESPONSE') {
+            setRequestSentNotice(false);
+            if (data.allowed) {
+              setIsScreenShareApproved(true);
+              setTimeout(() => startNativeScreenShare(), 0);
+            } else {
+              setToastNotice('❌ The room creator denied your screen share request.');
+              setTimeout(() => setToastNotice(null), 4000);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('DataReceived parse notice:', err.message);
+      }
+    });
+
+    // ── Point 3 Fix: Read metadata from EXISTING participants on join ──────────
+    // When you join a room that already has a presentation in progress,
+    // the presenter's setMetadata() call persists on the SFU — recover state from it.
+    function applyParticipantMetadata(participant) {
+      try {
+        if (!participant.metadata) return;
+        const meta = JSON.parse(participant.metadata);
+        if (meta.presenting) {
+          setSharedMedia(meta.presenting);
+        }
+        // Sync display names from LiveKit's authoritative name field
+        if (participant.name) {
+          setTracks((prev) =>
+            prev.map((t) =>
+              t.identity === participant.identity ? { ...t, name: participant.name } : t
+            )
+          );
+        }
+      } catch {}
+    }
+
+    // For participants who are already in the room when we join
+    room.on(RoomEvent.Connected, () => {
+      room.remoteParticipants.forEach(applyParticipantMetadata);
+    });
+
+    // For participants who join AFTER us
+    room.on(RoomEvent.ParticipantConnected, applyParticipantMetadata);
+
+    // When any participant updates their metadata (live nickname rename, presentation start/stop)
+    room.on(RoomEvent.ParticipantMetadataChanged, (_prevMeta, participant) => {
+      applyParticipantMetadata(participant);
+    });
+
+    // When participant's name is updated via setName() — sync tiles
+    room.on(RoomEvent.ParticipantNameChanged, (name, participant) => {
+      setTracks((prev) =>
+        prev.map((t) => (t.identity === participant.identity ? { ...t, name } : t))
+      );
+    });
+    // ─────────────────────────────────────────────────────────────────────────
+
     async function connect() {
       try {
         await room.connect(livekitUrl, roomToken);
@@ -236,8 +288,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         await room.localParticipant.setMicrophoneEnabled(true);
       } catch (err) {
         console.error('Failed to connect to LiveKit room:', err);
-        alert(`Failed to join call: ${err.message}`);
-        onLeave();
+        setToastNotice(`❌ Failed to join call: ${err.message}`);
+        setTimeout(() => onLeave(), 3000);
       }
     }
 
@@ -246,7 +298,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     return () => {
       room.disconnect();
     };
-  }, [roomToken, addTrack, removeTrack, onLeave, displayName]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomToken, addTrack, removeTrack, onLeave]);
+
 
   const toggleMic = async () => {
     if (!roomRef.current) return;
@@ -262,52 +316,56 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     setCamOn(newState);
   };
 
-  const handleUpdateInRoomName = (e) => {
+  // Live in-room nickname switch with instant broadcast and local sync
+  const handleUpdateInRoomName = async (e) => {
     e.preventDefault();
     if (!newNickname.trim()) return;
     const updated = newNickname.trim().slice(0, 50);
     setDisplayName(updated);
     
+    // 1. Update all local video/audio tracks in state immediately
     setTracks((prev) =>
       prev.map((t) => (t.isLocal ? { ...t, name: updated } : t))
     );
 
-    if (socketRef.current) {
-      socketRef.current.emit('user-renamed', {
-        roomId: roomData.id,
-        newDisplayName: updated,
-      });
+    // 2. Broadcast via LiveKit DataPacket to all room peers
+    sendDataPacket({ type: 'PARTICIPANT_RENAMED', userId: user.id, newDisplayName: updated }, 'meeting-control');
+
+    // 3. Update LiveKit local participant name natively
+    if (roomRef.current?.localParticipant?.setName) {
+      try {
+        await roomRef.current.localParticipant.setName(updated);
+      } catch (err) {
+        console.warn('LiveKit local participant name update notice:', err.message);
+      }
     }
 
+    setToastNotice(`✨ Your speaking name updated to: ${updated}`);
+    setTimeout(() => setToastNotice(null), 3000);
     setShowRenameModal(false);
   };
 
   const handleTakeSnapshot = () => {
     if (!isOwner) {
-      alert('Only the room creator/owner can capture memory snapshots.');
+      setToastNotice('⚠️ Only the room creator/owner can capture memory snapshots.');
+      setTimeout(() => setToastNotice(null), 3000);
       return;
     }
 
     captureRoomSnapshot(roomData.name);
-
-    if (socketRef.current) {
-      socketRef.current.emit('snapshot-taken', {
-        roomId: roomData.id,
-        displayName,
-      });
-    }
+    sendDataPacket({ type: 'SNAPSHOT_TAKEN', takenBy: displayName }, 'meeting-control');
   };
 
   const handleSharePresentation = (mediaUrl, mediaName, mediaType) => {
-    if (socketRef.current) {
-      socketRef.current.emit('share-presentation-media', {
-        roomId: roomData.id,
-        mediaUrl,
-        mediaName,
-        mediaType,
-        presenterName: displayName,
-      });
+    const mediaObj = { mediaUrl, mediaName, mediaType, presenterName: displayName };
+    setSharedMedia(mediaObj);
+    sendDataPacket({ type: 'PRESENTATION_MEDIA', media: mediaObj }, 'meeting-control');
+
+    // ── Point 3 Fix: Store presentation in SFU metadata so late joiners recover state ──
+    if (roomRef.current?.localParticipant?.setMetadata) {
+      roomRef.current.localParticipant.setMetadata(JSON.stringify({ presenting: mediaObj })).catch(() => {});
     }
+
     setShowInjector(false);
   };
 
@@ -319,13 +377,14 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     }
 
     setSharedMedia(null);
+    sendDataPacket({ type: 'PRESENTATION_MEDIA', media: null }, 'meeting-control');
 
-    if (socketRef.current) {
-      socketRef.current.emit('stop-presentation-media', {
-        roomId: roomData.id,
-      });
+    // Clear presentation from SFU metadata
+    if (roomRef.current?.localParticipant?.setMetadata) {
+      roomRef.current.localParticipant.setMetadata(JSON.stringify({ presenting: null })).catch(() => {});
     }
   };
+
 
   const handleScreenShareClick = () => {
     if (isSharingScreen) {
@@ -336,13 +395,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     if (isOwner || isScreenShareApproved) {
       startNativeScreenShare();
     } else {
-      if (socketRef.current) {
-        socketRef.current.emit('request-screen-share-permission', {
-          roomId: roomData.id,
-          requesterName: displayName,
-        });
-        setRequestSentNotice(true);
-      }
+      sendDataPacket({ type: 'REQUEST', requesterName: displayName }, 'screen-share-perm', [roomData.owner_id]);
+      setRequestSentNotice(true);
     }
   };
 
@@ -366,15 +420,13 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       }
 
       setIsSharingScreen(true);
+      const mediaObj = { mediaUrl: '', mediaName: 'Screen & Tab Watch Party', mediaType: 'video/screenshare', presenterName: displayName };
+      setSharedMedia(mediaObj);
+      sendDataPacket({ type: 'PRESENTATION_MEDIA', media: mediaObj }, 'meeting-control');
 
-      if (socketRef.current) {
-        socketRef.current.emit('share-presentation-media', {
-          roomId: roomData.id,
-          mediaUrl: '',
-          mediaName: 'Screen & Tab Watch Party',
-          mediaType: 'video/screenshare',
-          presenterName: displayName,
-        });
+      // Store screen share in SFU metadata so late joiners see the presentation stage
+      if (roomRef.current?.localParticipant?.setMetadata) {
+        roomRef.current.localParticipant.setMetadata(JSON.stringify({ presenting: mediaObj })).catch(() => {});
       }
     } catch (err) {
       console.warn('Screen share canceled or failed:', err);
@@ -382,20 +434,16 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     }
   };
 
+
   const handleRespondPermission = (allowed) => {
-    if (pendingPermissionRequest && socketRef.current) {
-      socketRef.current.emit('respond-screen-share-permission', {
-        requesterSocketId: pendingPermissionRequest.requesterSocketId,
-        allowed,
-      });
+    if (pendingPermissionRequest) {
+      sendDataPacket({ type: 'RESPONSE', allowed }, 'screen-share-perm', [pendingPermissionRequest.requesterUserId]);
       setPendingPermissionRequest(null);
     }
   };
 
   const handleEndMeetingForAll = () => {
-    if (socketRef.current) {
-      socketRef.current.emit('end-meeting-for-all', { roomId: roomData.id });
-    }
+    sendDataPacket({ type: 'MEETING_ENDED', endedBy: displayName }, 'meeting-control');
     onLeave();
   };
 
@@ -409,14 +457,16 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   return (
     <div className="call-layout">
       <header className="call-header">
-        <div style={{ fontWeight: 600, fontSize: '1.125rem' }}>Room: {roomData.name}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            Speaking as: <strong style={{ color: '#818cf8' }}>{displayName}</strong>
+        <div style={{ fontWeight: 700, fontSize: 'clamp(0.95rem, 2vw, 1.15rem)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ color: '#a5b4fc' }}>Room:</span> {roomData.name}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            Speaking as: <strong style={{ color: '#818cf8', fontWeight: 600 }}>{displayName}</strong>
           </span>
           <button
             className="btn-outline"
-            style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+            style={{ padding: '5px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '8px' }}
             onClick={() => { setNewNickname(displayName); setShowRenameModal(true); }}
           >
             <Edit3 size={12} /> Rename
@@ -442,7 +492,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           {/* Double-Clicked Spotlight / Pinned Hero Video Stage */}
           {pinnedTrack && (
             <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '12px' }}>
-              <div style={{ width: '100%', height: '100%', maxHeight: '60vh', borderRadius: '12px', overflow: 'hidden', border: '2px solid #ec4899', boxShadow: '0 8px 32px rgba(236,72,153,0.3)' }}>
+              <div style={{ width: '100%', height: '100%', maxHeight: '60vh', borderRadius: '14px', overflow: 'hidden', border: '2px solid #ec4899', boxShadow: '0 8px 32px rgba(236,72,153,0.3)' }}>
                 <TrackTile
                   item={pinnedTrack}
                   activeFilter={activeFilter}
@@ -496,6 +546,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         {showChat && (
           <ChatPanel
             token={token}
+            room={roomRef.current}
+            user={user}
             roomId={roomData.id}
             onClose={() => setShowChat(false)}
           />

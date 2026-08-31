@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from './api.js';
-import { io } from 'socket.io-client';
-import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3 } from 'lucide-react';
+import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive } from 'lucide-react';
 
 export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpdate }) {
   const [rooms, setRooms] = useState([]);
@@ -40,7 +39,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
   const [leavingRoomTarget, setLeavingRoomTarget] = useState(null);
   const [leaving, setLeaving] = useState(false);
 
-  const socketRef = useRef(null);
+  const eventSourceRef = useRef(null);
   const isAdmin = user && user.role === 'admin';
 
   const fetchRooms = async () => {
@@ -80,27 +79,48 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
     fetchRooms();
     fetchClips();
 
-    const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
-    const socket = io(serverUrl, { auth: { token } });
-    socketRef.current = socket;
+    // Native Browser Server-Sent Events (SSE) notification stream for instant live invites
+    const sseUrl = `${api.BASE_URL}/api/notifications/stream?token=${encodeURIComponent(token)}`;
+    const es = new EventSource(sseUrl);
+    eventSourceRef.current = es;
 
-    socket.on('room-invited-notice', (data) => {
-      if (data.inviteeUserId === user.id) {
-        setInviteNotice(`🎉 You were invited to room: "${data.roomName}"!`);
-        fetchRooms();
-        setTimeout(() => setInviteNotice(null), 5000);
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'ROOM_INVITED') {
+          setInviteNotice(`🎉 ${data.invitedBy} invited you to room: "${data.roomName}"!`);
+          fetchRooms();
+          setTimeout(() => setInviteNotice(null), 6000);
+        }
+      } catch (err) {
+        console.warn('SSE message parse error:', err);
       }
-    });
+    };
 
     const interval = setInterval(() => {
       fetchRooms();
-    }, 4000);
+    }, 15000);
 
     return () => {
-      socket.disconnect();
+      es.close();
       clearInterval(interval);
     };
   }, [token, user.id]);
+
+  // Auto-clear error and success messages after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const t = setTimeout(() => setError(''), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    if (success) {
+      const t = setTimeout(() => setSuccess(''), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [success]);
 
   const handleOpenAdminDirectory = () => {
     setShowAdminDirectory(true);
@@ -114,7 +134,7 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
     setError('');
     setSuccess('');
     try {
-      const res = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:4000'}/api/auth/profile`, {
+      const res = await fetch(`${api.BASE_URL}/api/auth/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -456,22 +476,41 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
             <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No media uploaded yet.</p>
           ) : (
             <div style={{ maxHeight: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {clips.map((clip) => (
-                <div key={clip.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                  <div>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#fff' }}>{clip.name}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{clip.mimeType} • {clip.status}</div>
-                  </div>
+              {clips.map((clip) => {
+                const isCloudinary = clip.storageProvider === 'cloudinary';
+                const isR2 = clip.storageProvider === 'r2';
+                return (
+                  <div key={clip.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <div>
+                      <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {clip.name}
+                        {isCloudinary ? (
+                          <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.4)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <Cloud size={10} /> Cloudinary CDN
+                          </span>
+                        ) : isR2 ? (
+                          <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.4)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <Cloud size={10} /> Cloudflare R2
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(156, 163, 175, 0.2)', color: '#d1d5db', border: '1px solid rgba(156, 163, 175, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <HardDrive size={10} /> Local Storage
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>{clip.mimeType} • {clip.status}</div>
+                    </div>
 
-                  <button
-                    className="btn-outline"
-                    onClick={() => handleDeleteClip(clip.id)}
-                    style={{ padding: '6px 10px', borderRadius: '8px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
+                    <button
+                      className="btn-outline"
+                      onClick={() => handleDeleteClip(clip.id)}
+                      style={{ padding: '6px 10px', borderRadius: '8px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

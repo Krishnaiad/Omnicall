@@ -7,8 +7,13 @@ import { api } from './api.js';
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('omnicall_token') || null);
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('omnicall_user');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('omnicall_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      localStorage.removeItem('omnicall_user');
+      return null;
+    }
   });
 
   const [activeRoom, setActiveRoom] = useState(null);

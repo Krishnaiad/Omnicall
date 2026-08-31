@@ -86,6 +86,13 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
       videoRef.current.src = '';
     }
     if (room) {
+      const existingPubs = Array.from(room.localParticipant.videoTrackPublications.values());
+      for (const pub of existingPubs) {
+        if (pub.track) {
+          await room.localParticipant.unpublishTrack(pub.track, true);
+          try { pub.track.stop(); } catch {}
+        }
+      }
       await room.localParticipant.setCameraEnabled(true);
     }
     setActiveTileMediaId(null);

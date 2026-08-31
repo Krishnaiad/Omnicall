@@ -79,7 +79,7 @@ export default function InCallInviteModal({ token, roomId, roomName, onClose }) 
                 key={userObj.id}
                 style={{
                   display: 'flex',
-                  justify: 'space-between',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
                   padding: '10px 12px',
                   borderRadius: '8px',
