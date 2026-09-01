@@ -32,16 +32,14 @@ export default function App() {
     return null;
   });
 
-  // Auto-validate session on boot. If user was deleted or token expired, cleanly return to login
+  // Auto-validate session on boot using API wrapper so silent refresh works
   useEffect(() => {
     if (token) {
-      fetch(`${api.BASE_URL}/api/rooms`, {
-        headers: { Authorization: `Bearer ${token}` }
-      }).then((res) => {
-        if (res.status === 401) {
+      api.get('/rooms').catch((err) => {
+        if (err.message === 'Token expired and refresh failed' || err.message === 'Session expired') {
           handleLogout();
         }
-      }).catch(() => {});
+      });
     }
   }, [token]);
 
@@ -82,10 +80,10 @@ export default function App() {
     localStorage.removeItem('omnicall_user');
   };
 
-  const handleGuestJoinSuccess = ({ room, roomToken: gToken, displayName, guestUser }) => {
+  const handleGuestJoinSuccess = ({ room, appToken, roomToken, displayName, guestUser }) => {
     setUser(guestUser);
-    setToken(gToken);
-    setRoomToken(gToken);
+    setToken(appToken);    // The REST API JWT
+    setRoomToken(roomToken); // The LiveKit WebRTC Token
     setInRoomNickname(displayName);
     setActiveRoom(room);
     // Clear URL path back to root without reloading
@@ -102,7 +100,7 @@ export default function App() {
       setInRoomNickname(data.displayName || chosenName);
       setActiveRoom(room);
     } catch (err) {
-      alert(`Could not join room call: ${err.message}`);
+      throw err;
     } finally {
       setJoining(false);
     }

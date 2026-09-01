@@ -381,11 +381,15 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
   };
 
 
-  const confirmJoin = (e) => {
+  const confirmJoin = async (e) => {
     e.preventDefault();
     if (!joiningRoom) return;
-    onJoinCall(joiningRoom, customNickname.trim() || user.name);
-    setJoiningRoom(null);
+    try {
+      await onJoinCall(joiningRoom, customNickname.trim() || user.name);
+      setJoiningRoom(null);
+    } catch (err) {
+      setError(`Could not join room: ${err.message}`);
+    }
   };
 
 

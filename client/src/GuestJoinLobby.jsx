@@ -37,7 +37,8 @@ export default function GuestJoinLobby({ inviteToken, onGuestJoinSuccess, onGoTo
       const data = await api.guestJoin(inviteToken, guestName.trim());
       onGuestJoinSuccess({
         room: { id: data.roomId, name: data.roomName, owner_id: preview?.hostName },
-        roomToken: data.token,
+        appToken: data.token,
+        roomToken: data.roomToken,
         displayName: data.displayName,
         guestUser: data.guestUser,
       });

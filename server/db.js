@@ -1,62 +1,55 @@
 import 'dotenv/config';
-import { DatabaseSync } from 'node:sqlite';
-import path from 'path';
-import fs from 'fs';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
+import { randomUUID } from 'node:crypto';
 
 const { Pool } = pg;
 
-export function randomUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
+export { randomUUID };
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
   throw new Error('[FATAL] DATABASE_URL environment variable is not set. Set it in Render → Environment Variables before starting.');
 }
-let isPg = false;
-let pool = null;
-let sqliteDb = null;
 
+const sslOptions = process.env.PG_SSL_CA
+  ? { ca: process.env.PG_SSL_CA, rejectUnauthorized: true }
+  : { rejectUnauthorized: false };
 
-if (DATABASE_URL) {
-  isPg = true;
-  const sslOptions = process.env.PG_SSL_CA
-    ? { ca: process.env.PG_SSL_CA, rejectUnauthorized: true }
-    : { rejectUnauthorized: false };
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  ssl: sslOptions,
+  statement_timeout: 15000,
+  idle_in_transaction_session_timeout: 30000,
+  max: Number(process.env.PG_POOL_MAX || 10),
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  keepAlive: true,
+});
 
-  pool = new Pool({
-    connectionString: DATABASE_URL,
-    ssl: sslOptions,
-    statement_timeout: 15000,
-    idle_in_transaction_session_timeout: 30000,
-    max: Number(process.env.PG_POOL_MAX || 10),
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-    keepAlive: true,
-  });
+pool.on('error', (err) => {
+  console.error('[DB Pool Error] Unexpected idle client error:', err.message);
+});
 
-  pool.on('error', (err) => {
-    console.error('[DB Pool Error] Unexpected idle client error:', err.message);
-  });
+console.log('[DB] Connecting to PostgreSQL Cloud Database via PgBouncer Pooler...');
 
-  console.log('[DB] Connecting to PostgreSQL Cloud Database via PgBouncer Pooler (Port 6543)...');
-} else {
-
-  const dbPath = path.resolve(process.env.DATABASE_PATH || './data.sqlite');
-  const dbDir = path.dirname(dbPath);
-  if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
-  sqliteDb = new DatabaseSync(dbPath);
-  console.log('[DB] Running on Local SQLite Database...');
-}
+export const db = {
+  isPg: () => true,
+  exec: async (sql) => {
+    return pool.query(sql);
+  },
+  queryGet: (sql, args = []) => {
+    return pool.query(sql, args).then((res) => res.rows[0]);
+  },
+  queryRun: (sql, args = []) => {
+    return pool.query(sql, args);
+  },
+  queryAll: (sql, args = []) => {
+    return pool.query(sql, args).then((res) => res.rows);
+  },
+};
 
 export async function connectWithBackoff(maxAttempts = 5) {
-  if (!isPg || !pool) return;
   for (let i = 0; i < maxAttempts; i++) {
     try {
       await pool.query('SELECT 1');
@@ -70,74 +63,7 @@ export async function connectWithBackoff(maxAttempts = 5) {
   }
 }
 
-export const db = {
-  isPg: () => isPg,
-  exec: async (sql) => {
-    if (isPg) {
-      return pool.query(sql);
-    } else {
-      return sqliteDb.exec(sql);
-    }
-  },
-  prepare: (sql) => {
-    return {
-      run: (...args) => {
-        if (isPg) {
-          let count = 0;
-          const pgSql = sql.replace(/\?/g, () => `$${++count}`);
-          return pool.query(pgSql, args);
-        } else {
-          return sqliteDb.prepare(sql).run(...args);
-        }
-      },
-      get: (...args) => {
-        if (isPg) {
-          let count = 0;
-          const pgSql = sql.replace(/\?/g, () => `$${++count}`);
-          return pool.query(pgSql, args).then((res) => res.rows[0]);
-        } else {
-          return sqliteDb.prepare(sql).get(...args);
-        }
-      },
-      all: (...args) => {
-        if (isPg) {
-          let count = 0;
-          const pgSql = sql.replace(/\?/g, () => `$${++count}`);
-          return pool.query(pgSql, args).then((res) => res.rows);
-        } else {
-          return sqliteDb.prepare(sql).all(...args);
-        }
-      },
-    };
-  },
-  queryGet: (sql, args = []) => {
-    if (isPg) {
-      let count = 0;
-      const pgSql = sql.replace(/\?/g, () => `$${++count}`);
-      return pool.query(pgSql, args).then((res) => res.rows[0]);
-    } else {
-      return Promise.resolve(sqliteDb.prepare(sql).get(...args));
-    }
-  },
-  queryAll: (sql, args = []) => {
-    if (isPg) {
-      let count = 0;
-      const pgSql = sql.replace(/\?/g, () => `$${++count}`);
-      return pool.query(pgSql, args).then((res) => res.rows);
-    } else {
-      return Promise.resolve(sqliteDb.prepare(sql).all(...args));
-    }
-  },
-  queryRun: (sql, args = []) => {
-    if (isPg) {
-      let count = 0;
-      const pgSql = sql.replace(/\?/g, () => `$${++count}`);
-      return pool.query(pgSql, args);
-    } else {
-      return Promise.resolve(sqliteDb.prepare(sql).run(...args));
-    }
-  },
-};
+// End of wrapper
 
 // Individual CREATE TABLE statements — split for Postgres compatibility
 const TABLE_STATEMENTS = [
@@ -266,15 +192,10 @@ const TABLE_STATEMENTS = [
   )`,
 ];
 
-// Migration: add column if missing (safe for both SQLite and Postgres)
+// Migration: add column if missing (safe for Postgres)
 async function addColumnIfMissing(table, column, type) {
   try {
-    if (isPg) {
-      await db.exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ${type}`);
-    } else {
-      // SQLite: attempt ALTER and swallow "duplicate column" error
-      await db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
-    }
+    await db.exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ${type}`);
   } catch (_) {
     // Column already exists — safe to ignore
   }
@@ -310,17 +231,17 @@ export async function seedAdminUser() {
 
 
   try {
-    const existing = await db.queryGet('SELECT id FROM users WHERE email = ?', [adminEmail]);
+    const existing = await db.queryGet('SELECT id FROM users WHERE email = $1', [adminEmail]);
     if (!existing) {
       const passwordHash = await bcrypt.hash(rawPassword, 12);
       const adminId = randomUUID();
       await db.queryRun(
-        'INSERT INTO users (id, email, password_hash, name, username, role) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO users (id, email, password_hash, name, username, role) VALUES ($1, $2, $3, $4, $5, $6)',
         [adminId, adminEmail, passwordHash, adminName, adminUsername, 'admin']
       );
       console.log(`[DB] Designated Admin user initialized: ${adminEmail}`);
     } else {
-      await db.queryRun('UPDATE users SET role = ?, username = ? WHERE email = ?', ['admin', adminUsername, adminEmail]);
+      await db.queryRun('UPDATE users SET role = $1, username = $2 WHERE email = $3', ['admin', adminUsername, adminEmail]);
     }
   } catch (err) {
     console.error('[DB] Admin seeding notice:', err.message);

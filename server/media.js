@@ -135,14 +135,14 @@ router.post('/upload', (req, res) => {
 // Delete all user's uploaded clips (Bulk cleanup)
 router.delete('/all', async (req, res) => {
   try {
-    const clips = await db.queryAll('SELECT id, storage_provider, storage_key, mime_type FROM media_files WHERE user_id = ?', [req.user.id]);
+    const clips = await db.queryAll('SELECT id, storage_provider, storage_key, mime_type FROM media_files WHERE user_id = $1', [req.user.id]);
     for (const clip of clips) {
       if (clip.storage_provider === 'cloudinary' && clip.storage_key) {
         const isVideo = clip.mime_type?.startsWith('video/') || clip.mime_type?.startsWith('audio/');
         await cloudinaryHelper.deleteMedia(clip.storage_key, { isVideo }).catch(() => {});
       }
     }
-    await db.queryRun('DELETE FROM media_files WHERE user_id = ?', [req.user.id]);
+    await db.queryRun('DELETE FROM media_files WHERE user_id = $1', [req.user.id]);
     res.json({ ok: true, message: 'All uploaded media deleted successfully' });
   } catch (err) {
     console.error('Delete all clips failed:', err);
@@ -174,7 +174,7 @@ router.get('/stream/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
 
   try {
-    const clip = await db.queryGet('SELECT * FROM media_files WHERE id = ?', [id]);
+    const clip = await db.queryGet('SELECT * FROM media_files WHERE id = $1', [id]);
     if (!clip) {
       return res.status(404).json({ error: 'Media file not found' });
     }
@@ -242,7 +242,7 @@ router.get('/stream/:id', requireAuth, async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const clip = await db.queryGet('SELECT * FROM media_files WHERE id = ?', [id]);
+    const clip = await db.queryGet('SELECT * FROM media_files WHERE id = $1', [id]);
 
     if (!clip) return res.status(404).json({ error: 'Media file not found' });
     if (clip.user_id !== req.user.id) {
@@ -268,7 +268,7 @@ router.delete('/:id', async (req, res) => {
       }
     }
 
-    await db.queryRun('DELETE FROM media_files WHERE id = ?', [id]);
+    await db.queryRun('DELETE FROM media_files WHERE id = $1', [id]);
     res.json({ ok: true });
   } catch (err) {
     console.error('Delete media failed:', err);

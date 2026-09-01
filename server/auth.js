@@ -60,11 +60,11 @@ export async function fetchUserBootstrapData(userId) {
         [userId]
       ).catch(() => []),
       db.queryAll(
-        'SELECT id, name, mime_type, file_size, storage_provider, public_url, status, created_at FROM media_files WHERE user_id = ? ORDER BY created_at DESC',
+        'SELECT id, name, mime_type, file_size, storage_provider, public_url, status, created_at FROM media_files WHERE user_id = $1 ORDER BY created_at DESC',
         [userId]
       ).catch(() => []),
       db.queryAll(
-        'SELECT id, room_id, room_name, media_url, caption, created_at FROM room_memories WHERE user_id = ? ORDER BY created_at DESC',
+        'SELECT id, room_id, room_name, media_url, caption, created_at FROM room_memories WHERE user_id = $1 ORDER BY created_at DESC',
         [userId]
       ).catch(() => []),
     ]);
@@ -151,7 +151,7 @@ router.post('/send-otp', async (req, res) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   try {
-    const existing = await db.queryGet('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    const existing = await db.queryGet('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
@@ -164,11 +164,11 @@ router.post('/send-otp', async (req, res) => {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
     // Clean up old OTPs for this email
-    await db.queryRun('DELETE FROM verification_otps WHERE email = ?', [normalizedEmail]);
+    await db.queryRun('DELETE FROM verification_otps WHERE email = $1', [normalizedEmail]);
 
     // Store in DB
     await db.queryRun(
-      'INSERT INTO verification_otps (id, email, otp_code, expires_at) VALUES (?, ?, ?, ?)',
+      'INSERT INTO verification_otps (id, email, otp_code, expires_at) VALUES ($1, $2, $3, $4)',
       [otpId, normalizedEmail, otpCode, expiresAt]
     );
 
@@ -211,7 +211,7 @@ router.post('/verify-otp-register', async (req, res) => {
 
     // 1. Verify OTP in database
     const otpRecord = await db.queryGet(
-      'SELECT id, expires_at FROM verification_otps WHERE email = ? AND otp_code = ?',
+      'SELECT id, expires_at FROM verification_otps WHERE email = $1 AND otp_code = $2',
       [normalizedEmail, cleanOtp]
     );
 
@@ -221,18 +221,18 @@ router.post('/verify-otp-register', async (req, res) => {
 
     const isExpired = new Date(otpRecord.expires_at).getTime() < Date.now();
     if (isExpired) {
-      await db.queryRun('DELETE FROM verification_otps WHERE id = ?', [otpRecord.id]);
+      await db.queryRun('DELETE FROM verification_otps WHERE id = $1', [otpRecord.id]);
       return res.status(400).json({ error: 'Verification code has expired. Please request a new code.' });
     }
 
     // 2. Check if email exists
-    const existing = await db.queryGet('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    const existing = await db.queryGet('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
     let assignedUsername = (username && username.trim()) ? username.trim().toLowerCase() : normalizedEmail.split('@')[0];
-    const usernameTaken = await db.queryGet('SELECT id FROM users WHERE LOWER(username) = ?', [assignedUsername]);
+    const usernameTaken = await db.queryGet('SELECT id FROM users WHERE LOWER(username) = $1', [assignedUsername]);
     if (usernameTaken) {
       assignedUsername = `${assignedUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
     }
@@ -242,12 +242,12 @@ router.post('/verify-otp-register', async (req, res) => {
     const id = randomUUID();
 
     await db.queryRun(
-      'INSERT INTO users (id, email, password_hash, name, username, role) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO users (id, email, password_hash, name, username, role) VALUES ($1, $2, $3, $4, $5, $6)',
       [id, normalizedEmail, passwordHash, name.trim(), assignedUsername, assignedRole]
     );
 
     // Delete verified OTP record
-    await db.queryRun('DELETE FROM verification_otps WHERE email = ?', [normalizedEmail]);
+    await db.queryRun('DELETE FROM verification_otps WHERE email = $1', [normalizedEmail]);
 
     const user = { id, email: normalizedEmail, name: name.trim(), username: assignedUsername, role: assignedRole };
     const accessToken = signAccessToken(user);
@@ -279,13 +279,13 @@ router.post('/register', async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const existing = await db.queryGet('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    const existing = await db.queryGet('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
     let assignedUsername = (username && username.trim()) ? username.trim().toLowerCase() : normalizedEmail.split('@')[0];
-    const usernameTaken = await db.queryGet('SELECT id FROM users WHERE LOWER(username) = ?', [assignedUsername]);
+    const usernameTaken = await db.queryGet('SELECT id FROM users WHERE LOWER(username) = $1', [assignedUsername]);
     if (usernameTaken) {
       assignedUsername = `${assignedUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
     }
@@ -295,7 +295,7 @@ router.post('/register', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const id = randomUUID();
     await db.queryRun(
-      'INSERT INTO users (id, email, password_hash, name, username, role) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO users (id, email, password_hash, name, username, role) VALUES ($1, $2, $3, $4, $5, $6)',
       [id, normalizedEmail, passwordHash, name.trim(), assignedUsername, assignedRole]
     );
 
@@ -322,7 +322,7 @@ router.post('/login', async (req, res) => {
     const normalizedEmail = email.toLowerCase().trim();
     // Explicit column list: never expose password_hash outside this comparison
     const row = await db.queryGet(
-      'SELECT id, email, name, username, role, password_hash FROM users WHERE email = ?',
+      'SELECT id, email, name, username, role, password_hash FROM users WHERE email = $1',
       [normalizedEmail]
     );
 
@@ -359,7 +359,7 @@ router.post('/refresh', async (req, res) => {
       return res.status(401).json({ error: 'Invalid or revoked refresh token' });
     }
 
-    const userRow = await db.queryGet('SELECT id, email, name, username, role FROM users WHERE id = ?', [payload.sub]);
+    const userRow = await db.queryGet('SELECT id, email, name, username, role FROM users WHERE id = $1', [payload.sub]);
     if (!userRow) {
       return res.status(401).json({ error: 'User account not found' });
     }
@@ -425,12 +425,12 @@ router.put('/profile', requireAuth, async (req, res) => {
   }
 
   try {
-    const currentUser = await db.queryGet('SELECT id, username FROM users WHERE id = ?', [req.user.id]);
+    const currentUser = await db.queryGet('SELECT id, username FROM users WHERE id = $1', [req.user.id]);
     
     // Only check collision if user is actually changing to a new username
     if (!currentUser || currentUser.username.toLowerCase() !== cleanUsername) {
       const existing = await db.queryGet(
-        'SELECT id FROM users WHERE LOWER(username) = ? AND id != ?',
+        'SELECT id FROM users WHERE LOWER(username) = $1 AND id != $2',
         [cleanUsername, req.user.id]
       );
 
@@ -440,7 +440,7 @@ router.put('/profile', requireAuth, async (req, res) => {
     }
 
     await db.queryRun(
-      'UPDATE users SET name = ?, username = ? WHERE id = ?',
+      'UPDATE users SET name = $1, username = $2 WHERE id = $3',
       [cleanName, cleanUsername, req.user.id]
     );
 
@@ -497,7 +497,7 @@ router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res) => {
   }
 
   try {
-    const target = await db.queryGet('SELECT id, role, username FROM users WHERE id = ?', [userId]);
+    const target = await db.queryGet('SELECT id, role, username FROM users WHERE id = $1', [userId]);
     if (!target) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -507,15 +507,15 @@ router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res) => {
     }
 
     // Clean up all related records
-    await db.queryRun('DELETE FROM room_memories WHERE user_id = ?', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM media_files WHERE user_id = ?', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM room_members WHERE user_id = ?', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM chat_messages WHERE sender_id = ?', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM hand_raises WHERE user_id = ?', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM poll_votes WHERE user_id = ?', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM live_sessions WHERE user_id = ?', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM rooms WHERE owner_id = ?', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM users WHERE id = ?', [userId]);
+    await db.queryRun('DELETE FROM room_memories WHERE user_id = $1', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM media_files WHERE user_id = $1', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM room_members WHERE user_id = $1', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM chat_messages WHERE sender_id = $1', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM hand_raises WHERE user_id = $1', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM poll_votes WHERE user_id = $1', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM live_sessions WHERE user_id = $1', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM rooms WHERE owner_id = $1', [userId]).catch(() => {});
+    await db.queryRun('DELETE FROM users WHERE id = $1', [userId]);
 
     revokedUserIds.add(userId);
     invalidateUsersCache();

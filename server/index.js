@@ -75,6 +75,8 @@ const apiLimiter = rateLimit({
 
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/send-otp', authLimiter);
+app.use('/api/auth/verify-otp-register', authLimiter);
 app.use('/api/', apiLimiter);
 
 

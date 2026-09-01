@@ -80,7 +80,7 @@ router.post('/', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    await db.queryRun('DELETE FROM room_memories WHERE id = ? AND user_id = ?', [id, req.user.id]);
+    await db.queryRun('DELETE FROM room_memories WHERE id = $1 AND user_id = $2', [id, req.user.id]);
     res.json({ ok: true, message: 'Memory deleted' });
   } catch (err) {
     console.error('Delete memory failed:', err);

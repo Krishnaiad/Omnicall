@@ -10,13 +10,13 @@ const router = Router();
 router.get('/join-preview/:token', async (req, res) => {
   const { token } = req.params;
   try {
-    const link = await db.queryGet('SELECT * FROM invite_links WHERE token = ?', [token]);
+    const link = await db.queryGet('SELECT * FROM invite_links WHERE token = $1', [token]);
     if (!link) return res.status(404).json({ error: 'Invite link is invalid or has expired' });
 
-    const room = await db.queryGet('SELECT id, name, owner_id FROM rooms WHERE id = ?', [link.room_id]);
+    const room = await db.queryGet('SELECT id, name, owner_id FROM rooms WHERE id = $1', [link.room_id]);
     if (!room) return res.status(404).json({ error: 'Associated room was not found' });
 
-    const owner = await db.queryGet('SELECT name, username FROM users WHERE id = ?', [room.owner_id]);
+    const owner = await db.queryGet('SELECT name, username FROM users WHERE id = $1', [room.owner_id]);
 
     res.json({
       ok: true,
@@ -43,10 +43,10 @@ router.post('/guest-join/:token', async (req, res) => {
   const guestUserId = `guest_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
   try {
-    const link = await db.queryGet('SELECT * FROM invite_links WHERE token = ?', [token]);
+    const link = await db.queryGet('SELECT * FROM invite_links WHERE token = $1', [token]);
     if (!link) return res.status(404).json({ error: 'Invite link is invalid or expired' });
 
-    const room = await db.queryGet('SELECT id, name FROM rooms WHERE id = ?', [link.room_id]);
+    const room = await db.queryGet('SELECT id, name FROM rooms WHERE id = $1', [link.room_id]);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
     const { apiKey, apiSecret } = getLiveKitCredentials();
@@ -54,16 +54,24 @@ router.post('/guest-join/:token', async (req, res) => {
       return res.status(500).json({ error: 'Server missing LiveKit credentials' });
     }
 
-    const at = new AccessToken(apiKey, apiSecret, {
-      identity: guestUserId,
+    const guestUser = {
+      id: guestUserId,
       name: cleanName,
+      username: 'guest',
+      role: 'guest',
+    };
+
+    // 1. Generate LiveKit Video Token
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity: guestUser.id,
+      name: guestUser.name,
       ttl: '2h',
       metadata: JSON.stringify({
         role: 'guest',
         isHost: false,
         isGuest: true,
-        userId: guestUserId,
-        username: 'guest',
+        userId: guestUser.id,
+        username: guestUser.username,
       }),
     });
 
@@ -75,28 +83,35 @@ router.post('/guest-join/:token', async (req, res) => {
       canPublishData: true,
     });
 
-    const jwtToken = await at.toJwt();
+    const liveKitToken = await at.toJwt();
+
+    // 2. Generate Application JWT (For Chat/Whiteboard REST API calls)
+    const { signAccessToken } = await import('./auth.js');
+    const appJwtToken = signAccessToken(guestUser);
+
+    // 3. Add to room_members table so isMember() checks pass
+    await db.queryRun(
+      'INSERT INTO room_members (room_id, user_id, role) VALUES ($1, $2, $3)',
+      [room.id, guestUser.id, 'guest']
+    ).catch(() => {}); // Ignore duplicate if they somehow rejoin with same ID
 
     res.json({
       ok: true,
-      token: jwtToken,
+      token: appJwtToken,         // Used by App.jsx for API authorization
+      roomToken: liveKitToken,    // Used by CallScreen.jsx for LiveKit WebSocket
       roomName: room.name,
       roomId: room.id,
-      displayName: cleanName,
+      displayName: guestUser.name,
       role: 'guest',
       isGuest: true,
-      guestUser: {
-        id: guestUserId,
-        name: cleanName,
-        username: 'guest',
-        role: 'guest',
-      },
+      guestUser: guestUser,
     });
   } catch (err) {
     console.error('Guest join failed:', err);
     res.status(500).json({ error: 'Failed to generate guest access: ' + err.message });
   }
 });
+
 
 // All routes below require authenticated user account
 router.use(requireAuth);
@@ -115,7 +130,7 @@ function getLiveKitCredentials() {
 }
 
 async function isMember(roomId, userId) {
-  const row = await db.queryGet('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?', [roomId, userId]);
+  const row = await db.queryGet('SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2', [roomId, userId]);
   return !!row;
 }
 
@@ -178,7 +193,7 @@ router.post('/', async (req, res) => {
 
   try {
     const existing = await db.queryGet(
-      'SELECT 1 FROM rooms WHERE owner_id = ? AND LOWER(name) = LOWER(?)',
+      'SELECT 1 FROM rooms WHERE owner_id = $1 AND LOWER(name) = LOWER($2)',
       [req.user.id, trimmedName]
     );
     if (existing) {
@@ -186,8 +201,8 @@ router.post('/', async (req, res) => {
     }
 
     const id = randomUUID();
-    await db.queryRun('INSERT INTO rooms (id, name, owner_id) VALUES (?, ?, ?)', [id, trimmedName, req.user.id]);
-    await db.queryRun('INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, ?)', [id, req.user.id, 'owner']);
+    await db.queryRun('INSERT INTO rooms (id, name, owner_id) VALUES ($1, $2, $3)', [id, trimmedName, req.user.id]);
+    await db.queryRun('INSERT INTO room_members (room_id, user_id, role) VALUES ($1, $2, $3)', [id, req.user.id, 'owner']);
     res.status(201).json({ id, name: trimmedName, owner_id: req.user.id, role: 'owner' });
   } catch (err) {
     console.error('Create room failed:', err);
@@ -253,7 +268,7 @@ router.post('/:roomId/messages', async (req, res) => {
     const sanitized = text.trim().slice(0, 1000);
 
     await db.queryRun(
-      'INSERT INTO chat_messages (id, room_id, sender_id, sender_name, message) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO chat_messages (id, room_id, sender_id, sender_name, message) VALUES ($1, $2, $3, $4, $5)',
       [msgId, roomId, req.user.id, req.user.name, sanitized]
     );
 
@@ -278,7 +293,7 @@ router.post('/:roomId/invite', async (req, res) => {
   const searchTerm = (query || username || email || '').trim().toLowerCase();
 
   try {
-    const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    const room = await db.queryGet('SELECT * FROM rooms WHERE id = $1', [roomId]);
     if (!room) return res.status(404).json({ error: 'Room not found' });
     if (room.owner_id !== req.user.id) {
       return res.status(403).json({ error: 'Only the room owner can invite members' });
@@ -286,7 +301,7 @@ router.post('/:roomId/invite', async (req, res) => {
     if (!searchTerm) return res.status(400).json({ error: 'Username or email is required' });
 
     const invitee = await db.queryGet(
-      'SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?',
+      'SELECT * FROM users WHERE LOWER(username) = $1 OR LOWER(email) = $2',
       [searchTerm, searchTerm]
     );
 
@@ -294,9 +309,9 @@ router.post('/:roomId/invite', async (req, res) => {
       return res.status(404).json({ error: `No user found matching "${searchTerm}". Please check the username/email.` });
     }
 
-    const existingMember = await db.queryGet('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?', [roomId, invitee.id]);
+    const existingMember = await db.queryGet('SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2', [roomId, invitee.id]);
     if (!existingMember) {
-      await db.queryRun('INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, ?)', [roomId, invitee.id, 'member']);
+      await db.queryRun('INSERT INTO room_members (room_id, user_id, role) VALUES ($1, $2, $3)', [roomId, invitee.id, 'member']);
     }
 
     // Trigger instant real-time Server-Sent Event (SSE) notification to invitee's Dashboard
@@ -319,7 +334,7 @@ router.post('/:roomId/invite', async (req, res) => {
 router.post('/:roomId/end-meeting', async (req, res) => {
   const { roomId } = req.params;
   try {
-    const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    const room = await db.queryGet('SELECT * FROM rooms WHERE id = $1', [roomId]);
     if (!room) return res.status(404).json({ error: 'Room not found' });
     if (room.owner_id !== req.user.id) {
       return res.status(403).json({ error: 'Only the room creator can end the meeting for everyone' });
@@ -339,7 +354,7 @@ router.post('/:roomId/end-meeting', async (req, res) => {
 
     // 2. Mark all live_sessions as ended
     await db.queryRun(
-      'UPDATE live_sessions SET left_at = CURRENT_TIMESTAMP, disconnect_reason = ? WHERE room_id = ? AND left_at IS NULL',
+      'UPDATE live_sessions SET left_at = CURRENT_TIMESTAMP, disconnect_reason = $1 WHERE room_id = $2 AND left_at IS NULL',
       ['host_ended_meeting', roomId]
     ).catch(() => {});
 
@@ -356,7 +371,7 @@ router.delete('/:roomId', async (req, res) => {
   const { roomId } = req.params;
 
   try {
-    const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    const room = await db.queryGet('SELECT * FROM rooms WHERE id = $1', [roomId]);
     if (!room) return res.status(404).json({ error: 'Room not found' });
     if (room.owner_id !== req.user.id) {
       return res.status(403).json({ error: 'Only the room owner can delete this room' });
@@ -372,13 +387,13 @@ router.delete('/:roomId', async (req, res) => {
       } catch (_) {}
     }
 
-    try { await db.queryRun('DELETE FROM chat_messages WHERE room_id = ?', [roomId]); } catch (_) {}
-    try { await db.queryRun('DELETE FROM room_members WHERE room_id = ?', [roomId]); } catch (_) {}
-    try { await db.queryRun('DELETE FROM hand_raises WHERE room_id = ?', [roomId]); } catch (_) {}
-    try { await db.queryRun('DELETE FROM polls WHERE room_id = ?', [roomId]); } catch (_) {}
-    try { await db.queryRun('DELETE FROM whiteboard_strokes WHERE room_id = ?', [roomId]); } catch (_) {}
-    try { await db.queryRun('DELETE FROM invite_links WHERE room_id = ?', [roomId]); } catch (_) {}
-    await db.queryRun('DELETE FROM rooms WHERE id = ?', [roomId]);
+    try { await db.queryRun('DELETE FROM chat_messages WHERE room_id = $1', [roomId]); } catch (_) {}
+    try { await db.queryRun('DELETE FROM room_members WHERE room_id = $1', [roomId]); } catch (_) {}
+    try { await db.queryRun('DELETE FROM hand_raises WHERE room_id = $1', [roomId]); } catch (_) {}
+    try { await db.queryRun('DELETE FROM polls WHERE room_id = $1', [roomId]); } catch (_) {}
+    try { await db.queryRun('DELETE FROM whiteboard_strokes WHERE room_id = $1', [roomId]); } catch (_) {}
+    try { await db.queryRun('DELETE FROM invite_links WHERE room_id = $1', [roomId]); } catch (_) {}
+    await db.queryRun('DELETE FROM rooms WHERE id = $1', [roomId]);
 
     res.json({ ok: true, message: 'Room deleted successfully' });
   } catch (err) {
@@ -393,13 +408,13 @@ router.delete('/:roomId/leave', async (req, res) => {
   const { roomId } = req.params;
 
   try {
-    const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    const room = await db.queryGet('SELECT * FROM rooms WHERE id = $1', [roomId]);
     if (!room) return res.status(404).json({ error: 'Room not found' });
     if (room.owner_id === req.user.id) {
       return res.status(400).json({ error: 'Room owner cannot leave the room. Use Delete Room instead.' });
     }
 
-    await db.queryRun('DELETE FROM room_members WHERE room_id = ? AND user_id = ?', [roomId, req.user.id]);
+    await db.queryRun('DELETE FROM room_members WHERE room_id = $1 AND user_id = $2', [roomId, req.user.id]);
     res.json({ ok: true, message: 'Left room successfully' });
   } catch (err) {
     console.error('Leave room failed:', err);
@@ -419,11 +434,11 @@ router.post('/:roomId/token', async (req, res) => {
   }
 
   try {
-    const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    const room = await db.queryGet('SELECT * FROM rooms WHERE id = $1', [roomId]);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
     const memberCheck = await db.queryGet(
-      'SELECT role FROM room_members WHERE room_id = ? AND user_id = ?',
+      'SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2',
       [roomId, req.user.id]
     );
     if (!memberCheck) {
@@ -470,7 +485,7 @@ router.get('/:roomId/live-status', async (req, res) => {
   const { apiKey, apiSecret, httpUrl } = getLiveKitCredentials();
 
   try {
-    const room = await db.queryGet('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    const room = await db.queryGet('SELECT * FROM rooms WHERE id = $1', [roomId]);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
     const memberCheck = await isMember(roomId, req.user.id);
@@ -478,7 +493,7 @@ router.get('/:roomId/live-status', async (req, res) => {
 
     // DB perspective: who's in live_sessions with no left_at
     const dbActiveSessions = await db.queryAll(
-      'SELECT participant_identity, participant_name, joined_at FROM live_sessions WHERE room_id = ? AND left_at IS NULL',
+      'SELECT participant_identity, participant_name, joined_at FROM live_sessions WHERE room_id = $1 AND left_at IS NULL',
       [roomId]
     );
 
@@ -503,7 +518,7 @@ router.get('/:roomId/live-status', async (req, res) => {
     // Auto-close zombie sessions found during reconciliation
     for (const zombie of zombieRows) {
       await db.queryRun(
-        'UPDATE live_sessions SET left_at = NOW(), disconnect_reason = ? WHERE room_id = ? AND participant_identity = ? AND left_at IS NULL',
+        'UPDATE live_sessions SET left_at = NOW(), disconnect_reason = $1 WHERE room_id = $2 AND participant_identity = $3 AND left_at IS NULL',
         ['reconciled_stale', roomId, zombie.participant_identity]
       ).catch(() => {});
     }
@@ -537,7 +552,7 @@ router.post('/:roomId/raise-hand', async (req, res) => {
 
     // Determine next monotonic sequence number for queue ordering
     const maxRow = await db.queryGet(
-      'SELECT COALESCE(MAX(sequence_num), 0) as max_seq FROM hand_raises WHERE room_id = ?',
+      'SELECT COALESCE(MAX(sequence_num), 0) as max_seq FROM hand_raises WHERE room_id = $1',
       [roomId]
     );
     const nextSeq = (maxRow?.max_seq || 0) + 1;
@@ -545,11 +560,11 @@ router.post('/:roomId/raise-hand', async (req, res) => {
 
     // Upsert hand raise row
     await db.queryRun(
-      'DELETE FROM hand_raises WHERE room_id = ? AND user_id = ?',
+      'DELETE FROM hand_raises WHERE room_id = $1 AND user_id = $2',
       [roomId, req.user.id]
     );
     await db.queryRun(
-      'INSERT INTO hand_raises (id, room_id, user_id, user_name, sequence_num) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO hand_raises (id, room_id, user_id, user_name, sequence_num) VALUES ($1, $2, $3, $4, $5)',
       [raiseId, roomId, req.user.id, req.user.name, nextSeq]
     );
 
@@ -576,13 +591,13 @@ router.post('/:roomId/lower-hand', async (req, res) => {
   const { targetUserId } = req.body || {};
 
   try {
-    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = ?', [roomId]);
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = $1', [roomId]);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
     const isHost = room.owner_id === req.user.id;
     const userToLower = (targetUserId && isHost) ? targetUserId : req.user.id;
 
-    await db.queryRun('DELETE FROM hand_raises WHERE room_id = ? AND user_id = ?', [roomId, userToLower]);
+    await db.queryRun('DELETE FROM hand_raises WHERE room_id = $1 AND user_id = $2', [roomId, userToLower]);
     res.json({ ok: true, loweredUserId: userToLower });
   } catch (err) {
     console.error('Lower hand failed:', err);
@@ -629,7 +644,7 @@ router.post('/:roomId/polls', async (req, res) => {
   }
 
   try {
-    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = ?', [roomId]);
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = $1', [roomId]);
     if (!room) return res.status(404).json({ error: 'Room not found' });
     if (room.owner_id !== req.user.id) {
       return res.status(403).json({ error: 'Only the room host can launch polls' });
@@ -639,7 +654,7 @@ router.post('/:roomId/polls', async (req, res) => {
     const cleanOptions = options.map((opt) => String(opt).trim()).filter(Boolean);
 
     await db.queryRun(
-      'INSERT INTO polls (id, room_id, creator_id, creator_name, question, options_json, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO polls (id, room_id, creator_id, creator_name, question, options_json, status) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [pollId, roomId, req.user.id, req.user.name, question.trim(), JSON.stringify(cleanOptions), 'active']
     );
 
@@ -677,20 +692,20 @@ router.post('/:roomId/polls/:pollId/vote', async (req, res) => {
     const memberCheck = await isMember(roomId, req.user.id);
     if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
 
-    const poll = await db.queryGet('SELECT * FROM polls WHERE id = ? AND room_id = ?', [pollId, roomId]);
+    const poll = await db.queryGet('SELECT * FROM polls WHERE id = $1 AND room_id = $2', [pollId, roomId]);
     if (!poll) return res.status(404).json({ error: 'Poll not found' });
     if (poll.status !== 'active') return res.status(400).json({ error: 'This poll is already closed' });
 
     const voteId = randomUUID();
     // Delete prior vote if any, then insert new vote
-    await db.queryRun('DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?', [pollId, req.user.id]);
+    await db.queryRun('DELETE FROM poll_votes WHERE poll_id = $1 AND user_id = $2', [pollId, req.user.id]);
     await db.queryRun(
-      'INSERT INTO poll_votes (id, poll_id, user_id, user_name, option_index) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO poll_votes (id, poll_id, user_id, user_name, option_index) VALUES ($1, $2, $3, $4, $5)',
       [voteId, pollId, req.user.id, req.user.name, optionIndex]
     );
 
     // Compute updated authoritative tally
-    const voteRows = await db.queryAll('SELECT option_index FROM poll_votes WHERE poll_id = ?', [pollId]);
+    const voteRows = await db.queryAll('SELECT option_index FROM poll_votes WHERE poll_id = $1', [pollId]);
     const tally = {};
     for (const v of voteRows) {
       tally[v.option_index] = (tally[v.option_index] || 0) + 1;
@@ -713,7 +728,7 @@ router.post('/:roomId/polls/:pollId/vote', async (req, res) => {
 router.post('/:roomId/polls/:pollId/close', async (req, res) => {
   const { roomId, pollId } = req.params;
   try {
-    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = ?', [roomId]);
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = $1', [roomId]);
     if (!room || room.owner_id !== req.user.id) {
       return res.status(403).json({ error: 'Only the room host can close polls' });
     }
@@ -733,13 +748,13 @@ router.get('/:roomId/polls', async (req, res) => {
     const memberCheck = await isMember(roomId, req.user.id);
     if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
 
-    const pollRows = await db.queryAll('SELECT * FROM polls WHERE room_id = ? ORDER BY created_at DESC', [roomId]);
+    const pollRows = await db.queryAll('SELECT * FROM polls WHERE room_id = $1 ORDER BY created_at DESC', [roomId]);
     const pollsWithTally = await Promise.all(
       pollRows.map(async (p) => {
         let options = [];
         try { options = JSON.parse(p.options_json); } catch {}
 
-        const voteRows = await db.queryAll('SELECT user_id, option_index FROM poll_votes WHERE poll_id = ?', [p.id]);
+        const voteRows = await db.queryAll('SELECT user_id, option_index FROM poll_votes WHERE poll_id = $1', [p.id]);
         const tally = {};
         let myVote = null;
         for (const v of voteRows) {
@@ -787,7 +802,7 @@ router.post('/:roomId/whiteboard/strokes', async (req, res) => {
 
     const strokeId = randomUUID();
     await db.queryRun(
-      'INSERT INTO whiteboard_strokes (id, room_id, user_id, stroke_data) VALUES (?, ?, ?, ?)',
+      'INSERT INTO whiteboard_strokes (id, room_id, user_id, stroke_data) VALUES ($1, $2, $3, $4)',
       [strokeId, roomId, req.user.id, JSON.stringify(stroke)]
     );
 
@@ -806,7 +821,7 @@ router.get('/:roomId/whiteboard', async (req, res) => {
     if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
 
     const rows = await db.queryAll(
-      'SELECT id, user_id as "userId", stroke_data as "strokeData", created_at as "createdAt" FROM whiteboard_strokes WHERE room_id = ? ORDER BY created_at ASC',
+      'SELECT id, user_id as "userId", stroke_data as "strokeData", created_at as "createdAt" FROM whiteboard_strokes WHERE room_id = $1 ORDER BY created_at ASC',
       [roomId]
     );
 
@@ -832,7 +847,7 @@ router.delete('/:roomId/whiteboard', async (req, res) => {
     const memberCheck = await isMember(roomId, req.user.id);
     if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
 
-    await db.queryRun('DELETE FROM whiteboard_strokes WHERE room_id = ?', [roomId]);
+    await db.queryRun('DELETE FROM whiteboard_strokes WHERE room_id = $1', [roomId]);
     res.json({ ok: true, message: 'Whiteboard canvas cleared' });
   } catch (err) {
     console.error('Clear whiteboard failed:', err);
@@ -851,11 +866,11 @@ router.post('/:roomId/invite-link', async (req, res) => {
     const memberCheck = await isMember(roomId, req.user.id);
     if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
 
-    let link = await db.queryGet('SELECT token FROM invite_links WHERE room_id = ?', [roomId]);
+    let link = await db.queryGet('SELECT token FROM invite_links WHERE room_id = $1', [roomId]);
     if (!link) {
       const token = randomUUID().replace(/-/g, '').slice(0, 16);
       await db.queryRun(
-        'INSERT INTO invite_links (id, room_id, token, created_by) VALUES (?, ?, ?, ?)',
+        'INSERT INTO invite_links (id, room_id, token, created_by) VALUES ($1, $2, $3, $4)',
         [randomUUID(), roomId, token, req.user.id]
       );
       link = { token };
