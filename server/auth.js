@@ -34,6 +34,38 @@ export function signRefreshToken(user) {
 // Backwards-compatible alias
 export const signToken = signAccessToken;
 
+// In-memory revocation set for instant session/ban invalidation (0ms DB-free check)
+export const revokedUserIds = new Set();
+
+// Consolidated Bootstrap Data Loader (Eliminates 3 post-login cross-region DB round-trips)
+export async function fetchUserBootstrapData(userId) {
+  try {
+    const [rooms, clips, memories] = await Promise.all([
+      db.queryAll(
+        `SELECT r.id, r.name, r.created_at, rm.role,
+          (SELECT COUNT(*)::int FROM room_members WHERE room_id = r.id) AS member_count
+         FROM rooms r
+         JOIN room_members rm ON rm.room_id = r.id
+         WHERE rm.user_id = ?
+         ORDER BY r.created_at DESC`,
+        [userId]
+      ).catch(() => []),
+      db.queryAll(
+        'SELECT id, name, mime_type, file_size, storage_provider, public_url, status, created_at FROM media_files WHERE user_id = ? ORDER BY created_at DESC',
+        [userId]
+      ).catch(() => []),
+      db.queryAll(
+        'SELECT id, room_id, room_name, media_url, caption, created_at FROM room_memories WHERE user_id = ? ORDER BY created_at DESC',
+        [userId]
+      ).catch(() => []),
+    ]);
+    return { rooms: rooms || [], clips: clips || [], memories: memories || [] };
+  } catch {
+    return { rooms: [], clips: [], memories: [] };
+  }
+}
+
+
 
 import nodemailer from 'nodemailer';
 
@@ -212,7 +244,8 @@ router.post('/verify-otp-register', async (req, res) => {
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
 
-    res.status(201).json({ token: accessToken, refreshToken, user });
+    invalidateUsersCache();
+    res.status(201).json({ token: accessToken, refreshToken, user, bootstrap: { rooms: [], clips: [], memories: [] } });
   } catch (err) {
     console.error('Verify OTP register failed:', err);
     res.status(500).json({ error: 'Registration failed: ' + err.message });
@@ -260,7 +293,9 @@ router.post('/register', async (req, res) => {
     const user = { id, email: normalizedEmail, name: name.trim(), username: assignedUsername, role: assignedRole };
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
-    res.status(201).json({ token: accessToken, refreshToken, user });
+
+    invalidateUsersCache();
+    res.status(201).json({ token: accessToken, refreshToken, user, bootstrap: { rooms: [], clips: [], memories: [] } });
   } catch (err) {
     console.error('Register failed:', err);
     res.status(500).json({ error: 'Registration failed' });
@@ -286,7 +321,11 @@ router.post('/login', async (req, res) => {
     const user = { id: row.id, email: row.email, name: row.name, username: row.username, role: row.role || 'user' };
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
-    res.json({ token: accessToken, refreshToken, user });
+
+    // Fetch bootstrap payload in parallel to eliminate 3 post-login cross-region roundtrips
+    const bootstrap = await fetchUserBootstrapData(row.id);
+
+    res.json({ token: accessToken, refreshToken, user, bootstrap });
   } catch (err) {
     console.error('Login failed:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -302,8 +341,8 @@ router.post('/refresh', async (req, res) => {
 
   try {
     const payload = jwt.verify(refreshToken, getSecret());
-    if (payload.type !== 'refresh' || !payload.sub) {
-      return res.status(401).json({ error: 'Invalid refresh token' });
+    if (payload.type !== 'refresh' || !payload.sub || revokedUserIds.has(payload.sub)) {
+      return res.status(401).json({ error: 'Invalid or revoked refresh token' });
     }
 
     const userRow = await db.queryGet('SELECT id, email, name, username, role FROM users WHERE id = ?', [payload.sub]);
@@ -321,8 +360,9 @@ router.post('/refresh', async (req, res) => {
 
     const newAccessToken = signAccessToken(user);
     const newRefreshToken = signRefreshToken(user);
+    const bootstrap = await fetchUserBootstrapData(user.id);
 
-    res.json({ token: newAccessToken, refreshToken: newRefreshToken, user });
+    res.json({ token: newAccessToken, refreshToken: newRefreshToken, user, bootstrap });
   } catch {
     return res.status(401).json({ error: 'Expired or invalid refresh token' });
   }
@@ -338,12 +378,16 @@ export function requireAuth(req, res, next) {
 
   try {
     const payload = jwt.verify(token, getSecret());
+    if (revokedUserIds.has(payload.sub)) {
+      return res.status(401).json({ error: 'Session has been revoked or account deleted.' });
+    }
     req.user = { id: payload.sub, email: payload.email, name: payload.name, username: payload.username, role: payload.role || 'user' };
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
+
 
 export function requireAdmin(req, res, next) {
   if (!req.user || req.user.role !== 'admin') {
@@ -459,11 +503,15 @@ router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res) => {
     await db.queryRun('DELETE FROM rooms WHERE owner_id = ?', [userId]).catch(() => {});
     await db.queryRun('DELETE FROM users WHERE id = ?', [userId]);
 
+    revokedUserIds.add(userId);
+    invalidateUsersCache();
+
     res.json({ ok: true, message: `User @${target.username} has been deleted permanently.` });
   } catch (err) {
     console.error('Delete user failed:', err);
     res.status(500).json({ error: 'Failed to delete user' });
   }
+
 });
 
 

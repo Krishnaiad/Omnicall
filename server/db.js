@@ -15,11 +15,10 @@ export function randomUUID() {
   });
 }
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres.uwruxjmzwroxcvctsqyg:Joshiji%4012iisc@aws-0-ap-south-1.pooler.supabase.com:5432/postgres';
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres.uwruxjmzwroxcvctsqyg:Joshiji%4012iisc@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true';
 let isPg = false;
 let pool = null;
 let sqliteDb = null;
-
 
 if (DATABASE_URL) {
   isPg = true;
@@ -33,14 +32,18 @@ if (DATABASE_URL) {
     statement_timeout: 15000,
     idle_in_transaction_session_timeout: 30000,
     max: Number(process.env.PG_POOL_MAX || 10),
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+    keepAlive: true,
   });
 
   pool.on('error', (err) => {
     console.error('[DB Pool Error] Unexpected idle client error:', err.message);
   });
 
-  console.log('[DB] Connecting to PostgreSQL Cloud Database...');
+  console.log('[DB] Connecting to PostgreSQL Cloud Database via PgBouncer Pooler (Port 6543)...');
 } else {
+
   const dbPath = path.resolve(process.env.DATABASE_PATH || './data.sqlite');
   const dbDir = path.dirname(dbPath);
   if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });

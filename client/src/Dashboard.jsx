@@ -2,19 +2,23 @@ import { useEffect, useState, useRef } from 'react';
 import { api } from './api.js';
 import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive, Image as ImageIcon, Download, Search, CheckCircle2, Sparkles, Camera, Eye } from 'lucide-react';
 
-export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpdate }) {
-  const [rooms, setRooms] = useState([]);
-  const [clips, setClips] = useState([]);
-  const [memories, setMemories] = useState([]);
+export default function Dashboard({ token, user, initialBootstrap, onLogout, onJoinCall, onUserUpdate }) {
+  const [rooms, setRooms] = useState(() => initialBootstrap?.rooms || []);
+  const [clips, setClips] = useState(() => {
+    const raw = initialBootstrap?.clips || [];
+    return Array.from(new Map(raw.map((c) => [c.id, c])).values());
+  });
+  const [memories, setMemories] = useState(() => initialBootstrap?.memories || []);
   const [newRoomName, setNewRoomName] = useState('');
   const [inviteEmail, setInviteEmail] = useState({});
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [loadingRooms, setLoadingRooms] = useState(true);
-  const [loadingMemories, setLoadingMemories] = useState(true);
+  const [loadingRooms, setLoadingRooms] = useState(() => !initialBootstrap);
+  const [loadingMemories, setLoadingMemories] = useState(() => !initialBootstrap);
   const [uploading, setUploading] = useState(false);
+
 
   // Real-time Invite Notice Banner
   const [inviteNotice, setInviteNotice] = useState(null);
@@ -119,9 +123,14 @@ export default function Dashboard({ token, user, onLogout, onJoinCall, onUserUpd
 
 
   useEffect(() => {
-    fetchRooms();
-    fetchClips();
-    fetchMemories();
+    if (!initialBootstrap) {
+      Promise.all([
+        fetchRooms(),
+        fetchClips(),
+        fetchMemories(),
+      ]);
+    }
+
 
     let es = null;
     try {

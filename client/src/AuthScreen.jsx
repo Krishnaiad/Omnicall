@@ -59,7 +59,7 @@ export default function AuthScreen({ onAuthSuccess }) {
         name.trim(),
         username.trim()
       );
-      onAuthSuccess(data.token, data.user, data.refreshToken);
+      onAuthSuccess(data.token, data.user, data.refreshToken, data.bootstrap);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -74,13 +74,14 @@ export default function AuthScreen({ onAuthSuccess }) {
 
     try {
       const data = await api.login(email.trim(), password);
-      onAuthSuccess(data.token, data.user, data.refreshToken);
+      onAuthSuccess(data.token, data.user, data.refreshToken, data.bootstrap);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleSwitchTab = (loginMode) => {
     setIsLogin(loginMode);

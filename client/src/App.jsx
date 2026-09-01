@@ -21,6 +21,7 @@ export default function App() {
   const [roomToken, setRoomToken] = useState(null);
   const [inRoomNickname, setInRoomNickname] = useState('');
   const [joining, setJoining] = useState(false);
+  const [initialBootstrap, setInitialBootstrap] = useState(null);
 
   // Check if current URL is a guest invite link: e.g. /join/:token
   const [guestInviteToken, setGuestInviteToken] = useState(() => {
@@ -45,15 +46,19 @@ export default function App() {
   }, [token]);
 
 
-  const handleAuthSuccess = (newToken, newUser, refreshToken) => {
+  const handleAuthSuccess = (newToken, newUser, refreshToken, bootstrap) => {
     setToken(newToken);
     setUser(newUser);
+    if (bootstrap) {
+      setInitialBootstrap(bootstrap);
+    }
     localStorage.setItem('omnicall_token', newToken);
     if (refreshToken) {
       localStorage.setItem('omnicall_refresh_token', refreshToken);
     }
     localStorage.setItem('omnicall_user', JSON.stringify(newUser));
   };
+
 
   const handleUserUpdate = (newUser, newToken, newRefreshToken) => {
     setUser(newUser);
@@ -148,10 +153,12 @@ export default function App() {
     <Dashboard
       token={token}
       user={user}
+      initialBootstrap={initialBootstrap}
       onLogout={handleLogout}
       onJoinCall={handleJoinCall}
       onUserUpdate={handleUserUpdate}
     />
   );
 }
+
 
