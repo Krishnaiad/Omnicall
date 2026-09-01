@@ -1,9 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import AuthScreen from './AuthScreen.jsx';
 import Dashboard from './Dashboard.jsx';
-import CallScreen from './CallScreen.jsx';
-import GuestJoinLobby from './GuestJoinLobby.jsx';
 import { api } from './api.js';
+
+// Lazy-load heavy WebRTC video calling engine & guest lobby on-demand
+const CallScreen = lazy(() => import('./CallScreen.jsx'));
+const GuestJoinLobby = lazy(() => import('./GuestJoinLobby.jsx'));
+
+// Speculative preloader function: loads CallScreen chunk into browser cache ahead of time
+export function prefetchCallScreen() {
+  import('./CallScreen.jsx').catch(() => {});
+}
 
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('omnicall_token') || null);
@@ -43,6 +50,19 @@ export default function App() {
     }
   }, [token]);
 
+
+  // Speculative prefetch: downloads CallScreen chunk in idle background as soon as user is authenticated
+  useEffect(() => {
+    if (token && user) {
+      if ('requestIdleCallback' in window) {
+        const handle = window.requestIdleCallback(prefetchCallScreen, { timeout: 2000 });
+        return () => window.cancelIdleCallback(handle);
+      } else {
+        const timer = setTimeout(prefetchCallScreen, 1200);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [token, user]);
 
   const handleAuthSuccess = (newToken, newUser, refreshToken, bootstrap) => {
     setToken(newToken);
@@ -119,14 +139,21 @@ export default function App() {
   // If visiting an invite link and not yet in call, show Guest Lobby
   if (guestInviteToken && !roomToken) {
     return (
-      <GuestJoinLobby
-        inviteToken={guestInviteToken}
-        onGuestJoinSuccess={handleGuestJoinSuccess}
-        onGoToLogin={() => {
-          window.history.replaceState({}, '', '/');
-          setGuestInviteToken(null);
-        }}
-      />
+      <Suspense fallback={
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#090d16', color: '#a5b4fc', fontSize: '0.95rem', gap: '10px' }}>
+          <div style={{ width: 22, height: 22, border: '2.5px solid rgba(165,180,252,0.2)', borderTopColor: '#818cf8', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <span>Loading Meeting Lobby…</span>
+        </div>
+      }>
+        <GuestJoinLobby
+          inviteToken={guestInviteToken}
+          onGuestJoinSuccess={handleGuestJoinSuccess}
+          onGoToLogin={() => {
+            window.history.replaceState({}, '', '/');
+            setGuestInviteToken(null);
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -136,14 +163,21 @@ export default function App() {
 
   if (activeRoom && roomToken) {
     return (
-      <CallScreen
-        token={token}
-        user={user}
-        roomData={activeRoom}
-        roomToken={roomToken}
-        initialDisplayName={inRoomNickname}
-        onLeave={handleLeaveCall}
-      />
+      <Suspense fallback={
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#090d16', color: '#a5b4fc', gap: '14px' }}>
+          <div style={{ width: 32, height: 32, border: '3px solid rgba(165,180,252,0.2)', borderTopColor: '#ec4899', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <span style={{ fontSize: '0.95rem', letterSpacing: '0.02em' }}>Entering Video Call Space…</span>
+        </div>
+      }>
+        <CallScreen
+          token={token}
+          user={user}
+          roomData={activeRoom}
+          roomToken={roomToken}
+          initialDisplayName={inRoomNickname}
+          onLeave={handleLeaveCall}
+        />
+      </Suspense>
     );
   }
 

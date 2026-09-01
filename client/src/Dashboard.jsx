@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from './api.js';
+import { prefetchCallScreen } from './App.jsx';
 import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive, Image as ImageIcon, Download, Search, CheckCircle2, Sparkles, Camera, Eye } from 'lucide-react';
 
 export default function Dashboard({ token, user, initialBootstrap, onLogout, onJoinCall, onUserUpdate }) {
@@ -544,6 +545,8 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                         className="btn-primary"
                         style={{ width: 'auto', padding: '6px 14px', borderRadius: '8px', fontSize: '0.8125rem', background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', gap: '4px' }}
                         onClick={() => promptJoin(room)}
+                        onMouseEnter={prefetchCallScreen}
+                        onFocus={prefetchCallScreen}
                       >
                         <Video size={14} /> Join Call
                       </button>
