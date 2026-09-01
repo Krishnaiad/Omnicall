@@ -15,10 +15,14 @@ export function randomUUID() {
   });
 }
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres.uwruxjmzwroxcvctsqyg:Joshiji%4012iisc@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?pgbouncer=true';
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  throw new Error('[FATAL] DATABASE_URL environment variable is not set. Set it in Render → Environment Variables before starting.');
+}
 let isPg = false;
 let pool = null;
 let sqliteDb = null;
+
 
 if (DATABASE_URL) {
   isPg = true;
@@ -298,7 +302,12 @@ export async function seedAdminUser() {
   const adminEmail = (process.env.ADMIN_EMAIL || 'admin@omnicall.com').toLowerCase().trim();
   const adminName = 'Admin';
   const adminUsername = 'admin';
-  const rawPassword = process.env.ADMIN_PASSWORD || 'adminomnicall@12';
+
+  if (!process.env.ADMIN_PASSWORD) {
+    throw new Error('[FATAL] ADMIN_PASSWORD environment variable is not set. Set it in Render → Environment Variables before starting.');
+  }
+  const rawPassword = process.env.ADMIN_PASSWORD;
+
 
   try {
     const existing = await db.queryGet('SELECT id FROM users WHERE email = ?', [adminEmail]);

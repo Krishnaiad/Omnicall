@@ -28,11 +28,20 @@ app.use(
   })
 );
 
+const CORS_ALLOWED_ORIGINS = new Set([
+  'https://omnicall-lac.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  ...(process.env.EXTRA_ALLOWED_ORIGINS ? process.env.EXTRA_ALLOWED_ORIGINS.split(',').map(o => o.trim()) : []),
+]);
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Permissive dynamic reflection allows Vercel frontend, mobile browsers, and local dev with credentials: true
-      callback(null, true);
+      // Allow requests with no origin (mobile apps, curl, Postman, server-to-server)
+      if (!origin) return callback(null, true);
+      if (CORS_ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+      return callback(new Error(`CORS: Origin "${origin}" is not allowed.`));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -45,15 +54,16 @@ app.post('/api/webhooks/livekit', express.raw({ type: 'application/webhook+json'
 
 app.use(express.json());
 
-// Relaxed rate limits during active testing
+// Auth rate limiter: strict limit on login/register to prevent brute-force attacks
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 10,
   skipSuccessfulRequests: true,
-  message: { error: 'Too many authentication attempts. Please wait a few minutes before trying again.' },
+  message: { error: 'Too many authentication attempts. Please wait 15 minutes before trying again.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
+
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

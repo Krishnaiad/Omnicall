@@ -35,7 +35,16 @@ export function signRefreshToken(user) {
 export const signToken = signAccessToken;
 
 // In-memory revocation set for instant session/ban invalidation (0ms DB-free check)
+//
+// ⚠️  SINGLE-INSTANCE ONLY: This Set lives in this Node.js process's heap.
+// When Render scales beyond 1 instance, a ban issued on instance A will NOT
+// propagate to instance B — revoked users can still make requests on other instances.
+// Upgrade path (when needed): replace this Set with Redis SADD/SISMEMBER:
+//   await redis.sadd('revoked_users', userId);   // on ban/delete
+//   await redis.sismember('revoked_users', id);  // in requireAuth
+// On free-tier Render (single instance) this is not an issue.
 export const revokedUserIds = new Set();
+
 
 // Consolidated Bootstrap Data Loader (Eliminates 3 post-login cross-region DB round-trips)
 export async function fetchUserBootstrapData(userId) {
@@ -311,7 +320,12 @@ router.post('/login', async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const row = await db.queryGet('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
+    // Explicit column list: never expose password_hash outside this comparison
+    const row = await db.queryGet(
+      'SELECT id, email, name, username, role, password_hash FROM users WHERE email = ?',
+      [normalizedEmail]
+    );
+
     const valid = row ? await bcrypt.compare(password, row.password_hash) : false;
 
     if (!row || !valid) {

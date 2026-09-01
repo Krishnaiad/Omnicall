@@ -170,13 +170,18 @@ router.get('/list', async (req, res) => {
 });
 
 // Stream or play media clip — 302 Redirect for Cloudinary / R2, streaming for local disk
-router.get('/stream/:id', async (req, res) => {
+router.get('/stream/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
 
   try {
     const clip = await db.queryGet('SELECT * FROM media_files WHERE id = ?', [id]);
     if (!clip) {
       return res.status(404).json({ error: 'Media file not found' });
+    }
+
+    // Authorization: only the owner can stream their own private media files
+    if (clip.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied: you do not own this media file' });
     }
 
     // Cloudinary Direct CDN Streaming (302 Redirect to Akamai/CloudFront CDN URL — 0 Express bandwidth!)

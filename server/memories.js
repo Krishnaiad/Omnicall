@@ -30,8 +30,27 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Media URL is required' });
   }
 
+  // Validate that mediaUrl and thumbnailUrl are real https:// URLs, not javascript: or data: XSS vectors
+  const isValidUrl = (url) => {
+    if (!url) return true; // optional fields are fine to omit
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+    } catch {
+      return false;
+    }
+  };
+
+  if (!isValidUrl(mediaUrl)) {
+    return res.status(400).json({ error: 'mediaUrl must be a valid HTTP/HTTPS URL' });
+  }
+  if (!isValidUrl(thumbnailUrl)) {
+    return res.status(400).json({ error: 'thumbnailUrl must be a valid HTTP/HTTPS URL' });
+  }
+
   try {
     const memoryId = randomUUID();
+
     await db.queryRun(
       `INSERT INTO room_memories (id, user_id, room_id, room_name, media_url, thumbnail_url, caption)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,

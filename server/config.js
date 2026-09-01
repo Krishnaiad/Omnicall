@@ -2,9 +2,9 @@ import 'dotenv/config';
 
 // Resolved ONCE at process start. Never re-read process.env per request.
 function resolveStorageConfig() {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'qk3mwuox';
-  const apiKey = process.env.CLOUDINARY_API_KEY || '592337475685796';
-  const apiSecret = process.env.CLOUDINARY_API_SECRET || 'LX71khK0dwS3AyApOsDuQrgX2ZU';
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
   if (cloudName && apiKey && apiSecret) {
     return {
@@ -13,6 +13,16 @@ function resolveStorageConfig() {
       apiKey,
       apiSecret,
     };
+  }
+
+  // Warn if only partially set (e.g., cloud name set but keys missing)
+  if (cloudName || apiKey || apiSecret) {
+    const missing = [
+      !cloudName && 'CLOUDINARY_CLOUD_NAME',
+      !apiKey && 'CLOUDINARY_API_KEY',
+      !apiSecret && 'CLOUDINARY_API_SECRET',
+    ].filter(Boolean).join(', ');
+    throw new Error(`Incomplete Cloudinary configuration. Missing env vars: ${missing}`);
   }
 
 
