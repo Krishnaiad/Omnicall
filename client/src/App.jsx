@@ -35,7 +35,7 @@ export default function App() {
   // Auto-validate session on boot using API wrapper so silent refresh works
   useEffect(() => {
     if (token) {
-      api.get('/rooms').catch((err) => {
+      api.listRooms(token).catch((err) => {
         if (err.message === 'Token expired and refresh failed' || err.message === 'Session expired') {
           handleLogout();
         }

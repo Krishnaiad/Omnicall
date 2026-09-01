@@ -73,6 +73,11 @@ async function request(endpoint, options = {}, isRetry = false) {
 export const api = {
   BASE_URL,
 
+  get: (endpoint, token) =>
+    request(endpoint.startsWith('/api') ? endpoint : `/api${endpoint.startsWith('/') ? '' : '/'}${endpoint}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }),
+
   refreshToken: (refreshToken) =>
     request('/api/auth/refresh', {
       method: 'POST',
