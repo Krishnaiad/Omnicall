@@ -33,19 +33,28 @@ pool.on('error', (err) => {
 
 console.log('[DB] Connecting to PostgreSQL Cloud Database via PgBouncer Pooler...');
 
+// SQL Placeholder Normalizer: supports both native $1 and auto-converts ? if ever passed
+function normalizeSql(sql) {
+  if (typeof sql === 'string' && sql.includes('?')) {
+    let count = 0;
+    return sql.replace(/\?/g, () => `$${++count}`);
+  }
+  return sql;
+}
+
 export const db = {
   isPg: () => true,
   exec: async (sql) => {
     return pool.query(sql);
   },
   queryGet: (sql, args = []) => {
-    return pool.query(sql, args).then((res) => res.rows[0]);
+    return pool.query(normalizeSql(sql), args).then((res) => res.rows[0]);
   },
   queryRun: (sql, args = []) => {
-    return pool.query(sql, args);
+    return pool.query(normalizeSql(sql), args);
   },
   queryAll: (sql, args = []) => {
-    return pool.query(sql, args).then((res) => res.rows);
+    return pool.query(normalizeSql(sql), args).then((res) => res.rows);
   },
 };
 

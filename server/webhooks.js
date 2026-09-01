@@ -49,10 +49,10 @@ export async function handleLiveKitWebhook(req, res) {
 
   try {
     if (eventName === 'participant_joined' && roomInfo && participant) {
-      // Try update first, then insert — compatible with both SQLite and Postgres
+      // Try update first, then insert — compatible with Postgres
       const updated = await db.queryRun(
-        `UPDATE live_sessions SET left_at = NULL, disconnect_reason = NULL, joined_at = CURRENT_TIMESTAMP, participant_name = ?
-         WHERE room_id = ? AND participant_identity = ?`,
+        `UPDATE live_sessions SET left_at = NULL, disconnect_reason = NULL, joined_at = CURRENT_TIMESTAMP, participant_name = $1
+         WHERE room_id = $2 AND participant_identity = $3`,
         [participant.name || participant.identity, roomInfo.name, participant.identity]
       );
 
@@ -61,7 +61,7 @@ export async function handleLiveKitWebhook(req, res) {
       if (affectedRows === 0) {
         await db.queryRun(
           `INSERT INTO live_sessions (id, room_id, room_name, participant_identity, participant_name)
-           VALUES (?, ?, ?, ?, ?)`,
+           VALUES ($1, $2, $3, $4, $5)`,
           [randomUUID(), roomInfo.name, roomInfo.name, participant.identity, participant.name || participant.identity]
         ).catch(() => {}); // Ignore duplicate key on concurrent webhooks
       }
@@ -70,8 +70,8 @@ export async function handleLiveKitWebhook(req, res) {
 
     } else if (eventName === 'participant_left' && roomInfo && participant) {
       await db.queryRun(
-        `UPDATE live_sessions SET left_at = CURRENT_TIMESTAMP, disconnect_reason = ?
-         WHERE room_id = ? AND participant_identity = ? AND left_at IS NULL`,
+        `UPDATE live_sessions SET left_at = CURRENT_TIMESTAMP, disconnect_reason = $1
+         WHERE room_id = $2 AND participant_identity = $3 AND left_at IS NULL`,
         [event.disconnectReason || 'unknown', roomInfo.name, participant.identity]
       );
       console.log(`[Webhook] 👋 participant_left  → room: ${roomInfo.name} | user: ${participant.identity}`);
@@ -79,7 +79,7 @@ export async function handleLiveKitWebhook(req, res) {
     } else if (eventName === 'room_finished' && roomInfo) {
       await db.queryRun(
         `UPDATE live_sessions SET left_at = CURRENT_TIMESTAMP, disconnect_reason = 'room_finished'
-         WHERE room_id = ? AND left_at IS NULL`,
+         WHERE room_id = $1 AND left_at IS NULL`,
         [roomInfo.name]
       );
       console.log(`[Webhook] 🏁 room_finished → room: ${roomInfo.name} | closed all active sessions`);

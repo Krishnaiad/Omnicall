@@ -107,7 +107,7 @@ router.post('/upload', (req, res) => {
       // Single DB Insert into Supabase PostgreSQL
       await db.queryRun(
         `INSERT INTO media_files (id, user_id, original_name, mime_type, file_path, storage_provider, storage_key, public_url, duration, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [fileId, req.user.id, req.file.originalname, req.file.mimetype, tempPath, provider, finalKey, publicUrl, duration, 'ready']
       );
 
@@ -157,7 +157,7 @@ router.get('/list', async (req, res) => {
     const clips = await db.queryAll(
       `SELECT id, original_name as name, mime_type as "mimeType", storage_provider as "storageProvider", public_url as "publicUrl", status, duration, created_at
        FROM media_files
-       WHERE user_id = ?
+       WHERE user_id = $1
        ORDER BY created_at DESC`,
       [req.user.id]
     );

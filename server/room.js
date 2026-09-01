@@ -170,8 +170,8 @@ router.get('/search-users', async (req, res) => {
   try {
     const users = await db.queryAll(
       `SELECT id, username, name, email FROM users 
-       WHERE (LOWER(username) LIKE ? OR LOWER(name) LIKE ? OR LOWER(email) LIKE ?) 
-       AND id != ?
+       WHERE (LOWER(username) LIKE $1 OR LOWER(name) LIKE $2 OR LOWER(email) LIKE $3) 
+       AND id != $4
        LIMIT 10`,
       [`%${q}%`, `%${q}%`, `%${q}%`, req.user.id]
     );
@@ -217,7 +217,7 @@ router.get('/', async (req, res) => {
       `SELECT rooms.id, rooms.name, rooms.owner_id, room_members.role, rooms.created_at
        FROM rooms
        JOIN room_members ON room_members.room_id = rooms.id
-       WHERE room_members.user_id = ?
+       WHERE room_members.user_id = $1
        ORDER BY rooms.created_at DESC`,
       [req.user.id]
     );
@@ -239,7 +239,7 @@ router.get('/:roomId/messages', async (req, res) => {
     const rows = await db.queryAll(
       `SELECT id, sender_id as "senderId", sender_name as "senderName", message as text, created_at as timestamp
        FROM chat_messages
-       WHERE room_id = ?
+       WHERE room_id = $1
        ORDER BY created_at ASC`,
       [roomId]
     );
@@ -615,7 +615,7 @@ router.get('/:roomId/hand-raises', async (req, res) => {
     const rows = await db.queryAll(
       `SELECT id, user_id as "userId", user_name as "userName", sequence_num as "sequenceNum", raised_at as "raisedAt"
        FROM hand_raises
-       WHERE room_id = ?
+       WHERE room_id = $1
        ORDER BY sequence_num ASC, raised_at ASC`,
       [roomId]
     );
@@ -733,7 +733,7 @@ router.post('/:roomId/polls/:pollId/close', async (req, res) => {
       return res.status(403).json({ error: 'Only the room host can close polls' });
     }
 
-    await db.queryRun("UPDATE polls SET status = 'closed' WHERE id = ? AND room_id = ?", [pollId, roomId]);
+    await db.queryRun("UPDATE polls SET status = 'closed' WHERE id = $1 AND room_id = $2", [pollId, roomId]);
     res.json({ ok: true, pollId, status: 'closed' });
   } catch (err) {
     console.error('Close poll failed:', err);

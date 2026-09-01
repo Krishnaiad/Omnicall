@@ -55,7 +55,7 @@ export async function fetchUserBootstrapData(userId) {
           (SELECT COUNT(*)::int FROM room_members WHERE room_id = r.id) AS member_count
          FROM rooms r
          JOIN room_members rm ON rm.room_id = r.id
-         WHERE rm.user_id = ?
+         WHERE rm.user_id = $1
          ORDER BY r.created_at DESC`,
         [userId]
       ).catch(() => []),

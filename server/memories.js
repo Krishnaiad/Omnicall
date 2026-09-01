@@ -11,7 +11,7 @@ router.get('/', async (req, res) => {
     const rows = await db.queryAll(
       `SELECT id, room_id as "roomId", room_name as "roomName", media_url as "mediaUrl", thumbnail_url as "thumbnailUrl", caption, created_at as "createdAt"
        FROM room_memories
-       WHERE user_id = ?
+       WHERE user_id = $1
        ORDER BY created_at DESC`,
       [req.user.id]
     );
@@ -53,7 +53,7 @@ router.post('/', async (req, res) => {
 
     await db.queryRun(
       `INSERT INTO room_memories (id, user_id, room_id, room_name, media_url, thumbnail_url, caption)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [memoryId, req.user.id, roomId || null, roomName || 'OmniCall Room', mediaUrl, thumbnailUrl || null, caption || 'Call Snapshot']
     );
 
