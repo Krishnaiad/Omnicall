@@ -3,8 +3,15 @@ name: Run Tests
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'server/**'
+      - '.github/workflows/test.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'server/**'
+      - '.github/workflows/test.yml'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
