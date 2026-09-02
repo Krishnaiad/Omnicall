@@ -879,39 +879,44 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
       {/* ─── 🛡️ System Health & Metrics (Admin Only) ─── */}
       {isAdmin && (
-        <div className="glass-card section-box" style={{ border: '1px solid rgba(245, 158, 11, 0.25)', marginTop: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 700, color: '#f59e0b' }}>
-              <Activity size={20} color="#f59e0b" /> System Health & Metrics
+        <div className="glass-card section-box" style={{ marginTop: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+              <Activity size={20} color="var(--accent)" /> System health & metrics
             </div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Admin Visibility Only</span>
+            <span className="neutral-badge" style={{ fontSize: '0.75rem' }}>Admin visibility only</span>
           </div>
 
           {!healthMetrics ? (
             <p style={{ color: 'var(--text-muted)' }}>Loading system metrics...</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Uptime</div>
-                  <div style={{ fontSize: '1.1rem', color: '#fff', fontWeight: 600 }}>{Math.floor(healthMetrics.uptime / 60)} mins</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                <div style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', padding: '14px 16px', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Uptime</div>
+                  <div style={{ fontSize: '1.4rem', color: 'var(--text-primary)', fontWeight: 600, marginTop: '4px' }}>{Math.floor(healthMetrics.uptime / 60)} mins</div>
                 </div>
-                <div style={{ flex: 1, background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Requests</div>
-                  <div style={{ fontSize: '1.1rem', color: '#fff', fontWeight: 600 }}>{healthMetrics.metrics?.totalRequests || 0}</div>
+
+                <div style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', padding: '14px 16px', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total requests</div>
+                  <div style={{ fontSize: '1.4rem', color: 'var(--text-primary)', fontWeight: 600, marginTop: '4px' }}>{healthMetrics.metrics?.totalRequests || 0}</div>
                 </div>
-                <div style={{ flex: 1, background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Status Codes</div>
-                  <div style={{ fontSize: '0.85rem', color: '#fff' }}>
-                    <span style={{ color: '#10b981' }}>2xx: {healthMetrics.metrics?.statusBuckets['2xx'] || 0}</span> | 
-                    <span style={{ color: '#f59e0b', marginLeft: '6px' }}>4xx: {healthMetrics.metrics?.statusBuckets['4xx'] || 0}</span> | 
-                    <span style={{ color: '#ef4444', marginLeft: '6px' }}>5xx: {healthMetrics.metrics?.statusBuckets['5xx'] || 0}</span>
+
+                <div style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', padding: '14px 16px', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status codes</div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 500, marginTop: '8px' }}>
+                    <span style={{ color: 'var(--success)', fontWeight: 600 }}>2xx: {healthMetrics.metrics?.statusBuckets['2xx'] || 0}</span>
+                    <span style={{ margin: '0 6px', color: 'var(--text-muted)' }}>•</span>
+                    <span style={{ color: 'var(--warning)', fontWeight: 600 }}>4xx: {healthMetrics.metrics?.statusBuckets['4xx'] || 0}</span>
+                    <span style={{ margin: '0 6px', color: 'var(--text-muted)' }}>•</span>
+                    <span style={{ color: 'var(--danger)', fontWeight: 600 }}>5xx: {healthMetrics.metrics?.statusBuckets['5xx'] || 0}</span>
                   </div>
                 </div>
+
                 {healthMetrics.dbPool && (
-                  <div style={{ flex: 1, background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '10px' }}>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Postgres Pool</div>
-                    <div style={{ fontSize: '0.85rem', color: '#fff' }}>
+                  <div style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', padding: '14px 16px', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Postgres pool</div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 500, marginTop: '8px' }}>
                       Total: {healthMetrics.dbPool.totalCount} | Idle: {healthMetrics.dbPool.idleCount} | Wait: {healthMetrics.dbPool.waitingCount}
                     </div>
                   </div>
@@ -919,12 +924,12 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               </div>
               
               {healthMetrics.metrics?.recentErrors?.length > 0 && (
-                <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '12px', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '0.85rem', color: '#ef4444', fontWeight: 600, marginBottom: '8px' }}>Recent Errors (Last 50)</div>
-                  <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '0.75rem', color: '#fca5a5' }}>
+                <div style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', padding: '14px', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--danger)', fontWeight: 600, marginBottom: '8px' }}>Recent Errors (Last 50)</div>
+                  <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '0.75rem', color: 'var(--danger)' }}>
                     {healthMetrics.metrics.recentErrors.map((err, i) => (
-                      <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid rgba(239, 68, 68, 0.1)' }}>
-                        <span style={{ opacity: 0.7 }}>{new Date(err.timestamp).toLocaleTimeString()}</span> - 
+                      <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid rgba(220, 38, 38, 0.1)' }}>
+                        <span style={{ opacity: 0.8 }}>{new Date(err.timestamp).toLocaleTimeString()}</span> - 
                         <strong> {err.method} {err.url} </strong> 
                         (Status: {err.statusCode}) {err.userId ? `User: ${err.userId}` : ''}
                       </div>
