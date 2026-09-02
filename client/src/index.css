@@ -22,6 +22,9 @@
   --warning: #e0b34d;         /* reserved: needs-attention states */
   --warning-bg: #3b2e15;
 
+  --card-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.4);
+  --modal-shadow: 0 24px 38px 3px rgba(0, 0, 0, 0.6);
+
   /* Backward-compatible aliases */
   --bg-dark: var(--bg);
   --bg-card: var(--surface);
@@ -35,27 +38,30 @@
 }
 
 [data-theme="light"] {
-  --bg: #f7f7f5;
-  --surface: #ffffff;
-  --surface-raised: #f1f0eb;
-  --text-primary: #1a1a1a;
-  --text-secondary: #6b6b66;
-  --text-muted: #9a9a92;
-  --border: #e5e4de;
-  --border-strong: #d3d1c7;
+  --bg: #f8fafc;              /* Slate-50: crisp, clean neutral off-white */
+  --surface: #ffffff;         /* pure white cards */
+  --surface-raised: #f1f5f9;  /* Slate-100: clean elevated rows and button backgrounds */
+  --text-primary: #0f172a;    /* Slate-900: sharp high-contrast text */
+  --text-secondary: #475569;  /* Slate-600: clear supporting copy */
+  --text-muted: #94a3b8;      /* Slate-400: subtle placeholder/metadata */
+  --border: #e2e8f0;          /* Slate-200: crisp border */
+  --border-strong: #cbd5e1;   /* Slate-300: solid divider border */
 
-  --accent: #534ab7;
-  --accent-hover: #453d99;
-  --accent-bg: #eeedfe;
+  --accent: #6366f1;          /* vibrant indigo primary */
+  --accent-hover: #4f46e5;    /* darker indigo on hover */
+  --accent-bg: #eef2ff;       /* soft indigo badge tint */
 
-  --success: #0f6e56;
-  --success-bg: #e1f5ee;
+  --success: #10b981;         /* emerald green */
+  --success-bg: #ecfdf5;
 
-  --danger: #a32d2d;
-  --danger-bg: #fcebeb;
+  --danger: #ef4444;          /* red */
+  --danger-bg: #fef2f2;
 
-  --warning: #854f0b;
-  --warning-bg: #faeeda;
+  --warning: #f59e0b;         /* amber */
+  --warning-bg: #fffbeb;
+
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  --modal-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
 
   /* Backward-compatible aliases */
   --bg-dark: var(--bg);
@@ -121,8 +127,9 @@ input, select, textarea {
 /* Standardized Card (Section 4 & 5) */
 .glass-card {
   background: var(--surface);
-  border: 0.5px solid var(--border);
+  border: 1px solid var(--border);
   border-radius: 12px;
+  box-shadow: var(--card-shadow);
   transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
 
@@ -433,6 +440,87 @@ input, select, textarea {
   cursor: pointer;
   height: 100%;
   width: 100%;
+}
+
+/* Dashboard Layout */
+.dashboard-layout {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: clamp(12px, 2.5vw, 32px);
+}
+
+.dashboard-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.brand-header-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-title {
+  font-size: clamp(1.15rem, 2.5vw, 1.35rem);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+}
+
+/* User Profile Nav Button (Bigger & More Visible) */
+.user-profile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px 6px 8px;
+  min-height: 44px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text-primary);
+  transition: background-color 150ms ease, border-color 150ms ease, transform 100ms ease;
+  cursor: pointer;
+}
+
+.user-profile-btn:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.user-profile-btn:active {
+  transform: scale(0.98);
+}
+
+/* Admin Directory Nav Button (Prominent) */
+.admin-directory-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  min-height: 44px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 100ms ease;
+  cursor: pointer;
+}
+
+.admin-directory-btn:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.admin-directory-btn:active {
+  transform: scale(0.98);
 }
 
 .dash-stats {

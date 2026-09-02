@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from './api.js';
 import { prefetchCallScreen } from './App.jsx';
-import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive, Image as ImageIcon, Download, Search, CheckCircle2, Sparkles, Camera, Eye, Sun, Moon } from 'lucide-react';
+import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive, Image as ImageIcon, Download, Search, CheckCircle2, Sparkles, Camera, Eye, Sun, Moon, User } from 'lucide-react';
 
 export default function Dashboard({ token, user, initialBootstrap, onLogout, onJoinCall, onUserUpdate }) {
   const [theme, setTheme] = useState(() => {
@@ -429,19 +429,53 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
     <div className="dashboard-layout">
       {/* Top Responsive Navbar */}
       <nav className="dashboard-nav glass-card">
-        <div className="brand-header-box" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Left Side: Brand & Live Platform Status */}
+        <div className="brand-header-box">
           <div style={{ background: 'var(--accent-bg)', color: 'var(--accent)', border: '0.5px solid var(--border)', padding: '10px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Video size={20} />
+            <Video size={22} />
           </div>
           <div>
-            <div className="brand-title" style={{ color: 'var(--text-primary)', fontWeight: 500, fontSize: '1.25rem' }}>OmniCall Workspace</div>
+            <div className="brand-title">OmniCall Workspace</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
               <span className="live-dot" style={{ width: '6px', height: '6px' }} /> Real-time WebRTC platform
             </div>
           </div>
         </div>
 
-        <div className="user-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Center / Navigation: User Directory (Admin) & Profile Button (Bigger & Visible with Avatar) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {isAdmin && (
+            <button
+              className="admin-directory-btn"
+              onClick={handleOpenAdminDirectory}
+              title="Open User Directory (Admin only)"
+            >
+              <Users size={18} color="var(--accent)" />
+              <span>User directory</span>
+            </button>
+          )}
+
+          <button
+            className="user-profile-btn"
+            onClick={handleOpenProfileModal}
+            title="Edit your profile"
+          >
+            <div className="avatar-circle" style={{ width: '36px', height: '36px', fontSize: '0.825rem', fontWeight: 600 }}>
+              {(user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                {user?.name || `@${user?.username || 'user'}`}
+              </span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.2 }}>
+                {isAdmin ? 'Admin' : `@${user?.username || 'user'}`}
+              </span>
+            </div>
+          </button>
+        </div>
+
+        {/* Other Side (Right End): Theme Switcher & Logout */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             type="button"
             className="theme-toggle-btn"
@@ -449,31 +483,15 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
             title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
             aria-label="Toggle dark/light theme"
           >
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </button>
-
-          {isAdmin && (
-            <button
-              className="btn-outline"
-              onClick={handleOpenAdminDirectory}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Users size={15} /> User directory
-            </button>
-          )}
 
           <button
             className="btn-outline"
-            onClick={handleOpenProfileModal}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            onClick={onLogout}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', minHeight: '38px', padding: '8px 14px' }}
+            title="Logout of OmniCall"
           >
-            <div className="avatar-circle" style={{ width: '22px', height: '22px', fontSize: '0.65rem' }}>
-              {(user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
-            </div>
-            <span>@{user?.username || 'user'}</span>
-          </button>
-
-          <button className="btn-outline" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <LogOut size={15} /> Logout
           </button>
         </div>
@@ -536,10 +554,10 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         {/* Video Rooms Box */}
         <div className="glass-card section-box">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 700, color: '#fff' }}>
-              <Video size={20} color="var(--text-muted)" /> Your Video Rooms
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+              <Video size={20} color="var(--text-muted)" /> Your video rooms
             </div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Unique Names Enforced</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Unique names enforced</span>
           </div>
 
           <form onSubmit={handleCreateRoom} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
@@ -916,14 +934,22 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
       {/* User Profile Edit Modal */}
       {showProfileModal && (
         <div className="modal-backdrop" style={{ zIndex: 1000 }}>
-          <div className="glass-card modal-box" style={{ width: '400px', padding: '24px', borderRadius: '16px' }}>
+          <div className="glass-card modal-box" style={{ width: '400px', padding: '24px', borderRadius: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.125rem', color: '#a5b4fc' }}>
-                <Edit3 size={20} /> Update Account Profile
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                <Edit3 size={18} color="var(--accent)" /> Account profile
               </div>
-              <button onClick={() => setShowProfileModal(false)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
-                <X size={18} />
+              <button onClick={() => setShowProfileModal(false)} className="btn-ghost" style={{ padding: '4px' }}>
+                <X size={16} />
               </button>
+            </div>
+
+            {/* Prominent Round Profile Avatar */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '16px' }}>
+              <div className="avatar-circle" style={{ width: '56px', height: '56px', fontSize: '1.25rem', fontWeight: 600, border: '2px solid var(--border-strong)', marginBottom: '8px' }}>
+                {(editName || user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
+              </div>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>@{user?.username}</span>
             </div>
 
             <form onSubmit={handleSaveProfile}>
@@ -1009,9 +1035,9 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               <div style={{ maxHeight: '340px', overflowY: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                    <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left', color: 'var(--text-secondary)' }}>
                       <th style={{ padding: '8px' }}>Name</th>
-                      <th style={{ padding: '8px' }}>Username / Email</th>
+                      <th style={{ padding: '8px' }}>Username / email</th>
                       <th style={{ padding: '8px' }}>Role</th>
                       {isAdmin && <th style={{ padding: '8px', textAlign: 'right' }}>Actions</th>}
                     </tr>
@@ -1028,11 +1054,11 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                         );
                       })
                       .map((u) => (
-                        <tr key={u.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                          <td style={{ padding: '8px', fontWeight: 600, color: '#fff' }}>{u.name}</td>
-                          <td style={{ padding: '8px', color: '#a5b4fc' }}>{u.username ? `@${u.username}` : u.email}</td>
+                        <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '8px', fontWeight: 500, color: 'var(--text-primary)' }}>{u.name}</td>
+                          <td style={{ padding: '8px', color: 'var(--accent)' }}>{u.username ? `@${u.username}` : u.email}</td>
                           <td style={{ padding: '8px' }}>
-                            <span style={{ fontSize: '0.7rem', background: u.role === 'admin' ? 'rgba(236,72,153,0.2)' : 'rgba(255,255,255,0.1)', color: u.role === 'admin' ? '#f472b6' : 'var(--text-muted)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                            <span className="neutral-badge" style={{ fontSize: '0.7rem', padding: '2px 6px', textTransform: 'capitalize' }}>
                               {u.role}
                             </span>
                           </td>
@@ -1076,9 +1102,9 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         <div className="modal-backdrop" style={{ zIndex: 1200 }} onClick={() => setSelectedMemoryView(null)}>
           <div className="glass-card modal-box" style={{ maxWidth: '850px', width: '92vw', padding: '16px', borderRadius: '16px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div style={{ fontWeight: 700, color: '#fff' }}>{selectedMemoryView.caption || selectedMemoryView.roomName}</div>
-              <button onClick={() => setSelectedMemoryView(null)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
-                <X size={20} />
+              <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{selectedMemoryView.caption || selectedMemoryView.roomName}</div>
+              <button onClick={() => setSelectedMemoryView(null)} className="btn-ghost" style={{ padding: '4px' }}>
+                <X size={18} />
               </button>
             </div>
             <img
@@ -1095,7 +1121,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                 className="btn-primary"
                 style={{ width: 'auto', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
               >
-                <Download size={15} /> Download High-Res PNG
+                <Download size={15} /> Download high-res PNG
               </a>
             </div>
           </div>
@@ -1108,11 +1134,11 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         <div className="modal-backdrop" style={{ zIndex: 1200 }} onClick={() => setSelectedMediaPreview(null)}>
           <div className="glass-card modal-box" style={{ maxWidth: '850px', width: '92vw', padding: '20px', borderRadius: '16px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <div style={{ fontWeight: 700, color: '#fff', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Film size={18} color="#ec4899" /> {selectedMediaPreview.name}
+              <div style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Film size={18} color="var(--accent)" /> {selectedMediaPreview.name}
               </div>
-              <button onClick={() => setSelectedMediaPreview(null)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
-                <X size={20} />
+              <button onClick={() => setSelectedMediaPreview(null)} className="btn-ghost" style={{ padding: '4px' }}>
+                <X size={18} />
               </button>
             </div>
 
