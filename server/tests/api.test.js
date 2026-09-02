@@ -1,112 +1,63 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import fs from 'fs';
-import path from 'path';
+import request from 'supertest';
+import { db, randomUUID } from '../db.js';
+import { signToken } from '../auth.js';
+import app from '../index.js';
 
-const testDbPath = path.resolve('./test_data.sqlite');
-if (fs.existsSync(testDbPath)) {
-  try { fs.unlinkSync(testDbPath); } catch {}
-}
+test('Backend API - Authorization tests', async (t) => {
+  // Ensure we are using a test database or at least Postgres is available
+  if (!process.env.DATABASE_URL) {
+    throw new Error('[FATAL] DATABASE_URL environment variable is not set.');
+  }
 
-process.env.JWT_SECRET = 'test_secret_key_12345';
-process.env.DATABASE_PATH = testDbPath;
+  const adminUser = { id: randomUUID(), email: 'admin@omnicall.com', name: 'Admin', role: 'admin' };
+  const normalUser = { id: randomUUID(), email: 'user@omnicall.com', name: 'User', role: 'user' };
+  const adminToken = signToken(adminUser);
+  const userToken = signToken(normalUser);
 
-const { db, randomUUID } = await import('../db.js');
-const { signToken } = await import('../auth.js');
+  // We need users in the DB to satisfy foreign keys
+  await db.queryRun('INSERT INTO users (id, email, password_hash, name, role) VALUES ($1, $2, $3, $4, $5)', [adminUser.id, adminUser.email, 'hash', adminUser.name, adminUser.role]);
+  await db.queryRun('INSERT INTO users (id, email, password_hash, name, role) VALUES ($1, $2, $3, $4, $5)', [normalUser.id, normalUser.email, 'hash', normalUser.name, normalUser.role]);
 
-test('Backend API - Authentication & Password Hashing', async (t) => {
-  await t.test('Password hashing with bcrypt', async () => {
-    const pass = 'SecretPassword123';
-    const hash = await bcrypt.hash(pass, 10);
-    assert.strictEqual(await bcrypt.compare(pass, hash), true);
-    assert.strictEqual(await bcrypt.compare('WrongPass', hash), false);
+  await t.test('requireAuth failure states', async () => {
+    // No token
+    let res = await request(app).get('/api/users');
+    assert.strictEqual(res.statusCode, 401);
+
+    // Invalid token
+    res = await request(app).get('/api/users').set('Authorization', 'Bearer invalidtoken123');
+    assert.strictEqual(res.statusCode, 401);
   });
 
-  await t.test('JWT token generation and verification', () => {
-    const user = { id: 'u-1', email: 'alice@example.com', name: 'Alice' };
-    const token = signToken(user);
-    assert.ok(token);
+  await t.test('DELETE /api/auth/users/:userId (admin vs non-admin)', async () => {
+    // Non-admin trying to delete a user
+    let res = await request(app)
+      .delete(`/api/auth/users/${normalUser.id}`)
+      .set('Authorization', `Bearer ${userToken}`);
+    assert.strictEqual(res.statusCode, 403);
 
-    const verified = jwt.verify(token, process.env.JWT_SECRET);
-    assert.strictEqual(verified.sub, 'u-1');
-    assert.strictEqual(verified.email, 'alice@example.com');
-  });
-});
-
-test('Backend Database - Rooms & Membership Permissions', async (t) => {
-  const aliceId = randomUUID();
-  const bobId = randomUUID();
-  const roomId = randomUUID();
-
-  await t.test('Create user records', () => {
-    db.prepare('INSERT INTO users (id, email, password_hash, name) VALUES (?, ?, ?, ?)').run(
-      aliceId,
-      `alice_${Date.now()}@test.com`,
-      'hash',
-      'Alice'
-    );
-    db.prepare('INSERT INTO users (id, email, password_hash, name) VALUES (?, ?, ?, ?)').run(
-      bobId,
-      `bob_${Date.now()}@test.com`,
-      'hash',
-      'Bob'
-    );
-    const alice = db.prepare('SELECT * FROM users WHERE id = ?').get(aliceId);
-    assert.strictEqual(alice.name, 'Alice');
+    // Admin trying to delete a user (success or 400 if self)
+    res = await request(app)
+      .delete(`/api/auth/users/${normalUser.id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    assert.strictEqual(res.statusCode, 200);
   });
 
-  await t.test('Create room and verify owner membership', () => {
-    db.prepare('INSERT INTO rooms (id, name, owner_id) VALUES (?, ?, ?)').run(roomId, 'Test Room', aliceId);
-    db.prepare('INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, ?)').run(roomId, aliceId, 'owner');
-
-    const memberCheckAlice = db.prepare('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?').get(roomId, aliceId);
-    assert.ok(memberCheckAlice);
-
-    const memberCheckBob = db.prepare('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?').get(roomId, bobId);
-    assert.strictEqual(memberCheckBob, undefined);
+  await t.test('GET /api/media/stream/:id', async () => {
+    const res = await request(app).get('/api/media/stream/some-invalid-id').set('Authorization', `Bearer ${userToken}`);
+    // Should be 404 or 403 because we don't own it
+    assert.ok(res.statusCode === 404 || res.statusCode === 403);
   });
 
-  await t.test('Invite user to room', () => {
-    db.prepare('INSERT INTO room_members (room_id, user_id, role) VALUES (?, ?, ?)').run(roomId, bobId, 'member');
-    const memberCheckBob = db.prepare('SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?').get(roomId, bobId);
-    assert.ok(memberCheckBob);
-  });
-});
-
-test('Backend Database - Custom In-Room Display Name Token Parameters', async (t) => {
-  await t.test('Format custom nickname alias correctly', () => {
-    const rawAlias = '  CyberNinja_99  ';
-    const effectiveName = rawAlias.trim().slice(0, 50);
-    assert.strictEqual(effectiveName, 'CyberNinja_99');
-  });
-});
-
-test('Backend Database - Media File Pipeline Records', async (t) => {
-  const mediaId = randomUUID();
-  const userId = randomUUID();
-
-  await t.test('Insert media record', () => {
-    db.prepare('INSERT INTO users (id, email, password_hash, name) VALUES (?, ?, ?, ?)').run(
-      userId,
-      `mediauser_${Date.now()}@test.com`,
-      'hash',
-      'Media User'
-    );
-
-    db.prepare(
-      `INSERT INTO media_files (id, user_id, original_name, mime_type, file_path, status)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(mediaId, userId, 'intro.mp4', 'video/mp4', '/tmp/intro.mp4', 'processing');
-
-    const fileRecord = db.prepare('SELECT * FROM media_files WHERE id = ?').get(mediaId);
-    assert.strictEqual(fileRecord.status, 'processing');
+  await t.test('GET /api/rooms/:roomId/messages', async () => {
+    const res = await request(app).get('/api/rooms/invalid-room/messages').set('Authorization', `Bearer ${userToken}`);
+    assert.ok(res.statusCode === 404 || res.statusCode === 403);
   });
 
-  await t.test('Update media status to ready', () => {
-    db.prepare(`UPDATE media_files SET status = 'ready' WHERE id = ?`).run(mediaId);
-    const fileRecord = db.prepare('SELECT * FROM media_files WHERE id = ?').get(mediaId);
-    assert.strictEqual(fileRecord.status, 'ready');
+  t.after(async () => {
+    // Clean up
+    await db.queryRun('DELETE FROM users WHERE id = $1', [adminUser.id]).catch(() => {});
+    await db.queryRun('DELETE FROM users WHERE id = $1', [normalUser.id]).catch(() => {});
   });
 });

@@ -1,20 +1,41 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
+import { redisPublisher, redisSubscriber } from './redis.js';
 
 const router = Router();
 
-// ─── SSE Connection Store ───────────────────────────────────────────────────
-// In-process Map: userId → Set of active SSE response objects
-//
-// ⚠️  SINGLE-INSTANCE ONLY: This works correctly for one Node.js process.
-// When you add a second server instance (Docker replica, Render scale-up),
-// users connected to different instances won't receive cross-instance events.
-// Upgrade path (when needed): replace notifyUser() with Redis Pub/Sub:
-//   publisher.publish(`user:${userId}`, JSON.stringify(data))
-//   each instance subscribes and forwards to its local SSE clients
-// ────────────────────────────────────────────────────────────────────────────
 const clients = new Map(); // userId → Set<res>
-const MAX_CONNECTIONS_PER_USER = 5; // Prevents connection leak from unclosed tabs
+const MAX_CONNECTIONS_PER_USER = 5;
+
+// Listen for cross-instance notifications
+redisSubscriber.subscribe('sse_notifications', (err) => {
+  if (err) console.error('[Redis] Failed to subscribe to sse_notifications', err);
+});
+
+redisSubscriber.on('message', (channel, message) => {
+  if (channel === 'sse_notifications') {
+    try {
+      const { userId, data } = JSON.parse(message);
+      const userClients = clients.get(userId);
+      if (userClients) {
+        const payload = `data: ${JSON.stringify(data)}\n\n`;
+        const broken = [];
+        userClients.forEach((res) => {
+          try {
+            res.write(payload);
+          } catch (e) {
+            broken.push(res);
+          }
+        });
+        for (const res of broken) userClients.delete(res);
+        if (userClients.size === 0) clients.delete(userId);
+      }
+    } catch (e) {
+      console.error('[Redis] Failed to process incoming SSE message', e);
+    }
+  }
+});
+// Prevents connection leak from unclosed tabs
 
 function getSecret() {
   const secret = process.env.JWT_SECRET;
@@ -99,32 +120,10 @@ router.get('/stream', (req, res) => {
 });
 
 /**
- * Send a real-time event to all SSE connections for a user.
- * Fire-and-forget: broken connections are removed from the map silently.
+ * Send a real-time event to all SSE connections for a user via Redis Pub/Sub.
  */
 export function notifyUser(userId, data) {
-  const userClients = clients.get(userId);
-  if (!userClients || userClients.size === 0) return;
-
-  const payload = `data: ${JSON.stringify(data)}\n\n`;
-  const broken = [];
-
-  userClients.forEach((res) => {
-    try {
-      res.write(payload);
-    } catch (err) {
-      console.warn(`[SSE] Broken connection for user ${userId} — removing:`, err.message);
-      broken.push(res);
-    }
-  });
-
-  // Purge broken connections discovered during send
-  for (const res of broken) {
-    userClients.delete(res);
-  }
-  if (userClients.size === 0) {
-    clients.delete(userId);
-  }
+  redisPublisher.publish('sse_notifications', JSON.stringify({ userId, data }));
 }
 
 /**

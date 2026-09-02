@@ -34,16 +34,10 @@ export function signRefreshToken(user) {
 // Backwards-compatible alias
 export const signToken = signAccessToken;
 
-// In-memory revocation set for instant session/ban invalidation (0ms DB-free check)
-//
-// ⚠️  SINGLE-INSTANCE ONLY: This Set lives in this Node.js process's heap.
-// When Render scales beyond 1 instance, a ban issued on instance A will NOT
-// propagate to instance B — revoked users can still make requests on other instances.
-// Upgrade path (when needed): replace this Set with Redis SADD/SISMEMBER:
-//   await redis.sadd('revoked_users', userId);   // on ban/delete
-//   await redis.sismember('revoked_users', id);  // in requireAuth
-// On free-tier Render (single instance) this is not an issue.
-export const revokedUserIds = new Set();
+import { redis } from './redis.js';
+
+// The in-memory set is replaced with Redis SADD/SISMEMBER for multi-instance support
+
 
 
 // Consolidated Bootstrap Data Loader (Eliminates 3 post-login cross-region DB round-trips)
@@ -355,7 +349,8 @@ router.post('/refresh', async (req, res) => {
 
   try {
     const payload = jwt.verify(refreshToken, getSecret());
-    if (payload.type !== 'refresh' || !payload.sub || revokedUserIds.has(payload.sub)) {
+    const isRevoked = await redis.sismember('revoked_users', payload.sub);
+    if (payload.type !== 'refresh' || !payload.sub || isRevoked) {
       return res.status(401).json({ error: 'Invalid or revoked refresh token' });
     }
 
@@ -383,7 +378,7 @@ router.post('/refresh', async (req, res) => {
 });
 
 
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : (req.query?.token || null);
   if (!token) {
@@ -392,12 +387,13 @@ export function requireAuth(req, res, next) {
 
   try {
     const payload = jwt.verify(token, getSecret());
-    if (revokedUserIds.has(payload.sub)) {
+    const isRevoked = await redis.sismember('revoked_users', payload.sub);
+    if (isRevoked) {
       return res.status(401).json({ error: 'Session has been revoked or account deleted.' });
     }
     req.user = { id: payload.sub, email: payload.email, name: payload.name, username: payload.username, role: payload.role || 'user' };
     next();
-  } catch {
+  } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
@@ -517,7 +513,10 @@ router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res) => {
     await db.queryRun('DELETE FROM rooms WHERE owner_id = $1', [userId]).catch(() => {});
     await db.queryRun('DELETE FROM users WHERE id = $1', [userId]);
 
-    revokedUserIds.add(userId);
+    // Ban the user for 7 days (length of refresh token)
+    await redis.sadd('revoked_users', userId);
+    await redis.expire('revoked_users', 7 * 24 * 60 * 60);
+
     invalidateUsersCache();
 
     res.json({ ok: true, message: `User @${target.username} has been deleted permanently.` });

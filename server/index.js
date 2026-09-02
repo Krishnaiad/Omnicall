@@ -14,10 +14,16 @@ import mediaRouter from './media.js';
 import notificationRouter from './notifications.js';
 import memoriesRouter from './memories.js';
 import { handleLiveKitWebhook } from './webhooks.js';
+import { httpLogger, metricsMiddleware, logger } from './logger.js';
+import adminRouter from './admin.js';
 
+// Route global console logs to pino
+console.log = (...args) => logger.info(...args);
+console.error = (...args) => logger.error(...args);
+console.warn = (...args) => logger.warn(...args);
 
 const app = express();
-const server = createServer(app);
+
 
 const PORT = process.env.PORT || 4000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || '*';
@@ -53,6 +59,8 @@ app.use(
 app.post('/api/webhooks/livekit', express.raw({ type: 'application/webhook+json' }), handleLiveKitWebhook);
 
 app.use(express.json());
+app.use(httpLogger);
+app.use(metricsMiddleware);
 
 // Auth rate limiter: strict limit on login/register to prevent brute-force attacks
 const authLimiter = rateLimit({
@@ -86,6 +94,7 @@ app.use('/api/rooms', roomRouter);
 app.use('/api/media', mediaRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/memories', memoriesRouter);
+app.use('/api/admin', adminRouter);
 
 
 // Production Health Check (DB + Storage)
@@ -115,8 +124,4 @@ app.get('/health', async (_req, res) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`[Server] OmniCall WebRTC platform running on port ${PORT}`);
-  console.log(`[Server] Storage Provider locked at boot: ${storageConfig.provider.toUpperCase()}`);
-  console.log(`[Server] Auth rate limit: 10 failed attempts / 15min per IP`);
-});
+export default app;
