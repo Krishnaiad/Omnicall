@@ -18,10 +18,14 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin, isSpea
 
   useEffect(() => {
     const el = elRef.current;
-    if (!item.track || !el) return;
+    // Guard: item.track must exist AND have an attach method (LiveKit Track)
+    // Raw MediaStreamTrack objects do NOT have .attach() — skip them to avoid crash
+    if (!item.track || !el || typeof item.track.attach !== 'function') return;
     item.track.attach(el);
     return () => {
-      item.track.detach(el);
+      if (item.track && typeof item.track.detach === 'function') {
+        item.track.detach(el);
+      }
     };
   }, [item.track]);
 
@@ -212,7 +216,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     roomRef.current = room;
 
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-      addTrack(publication.trackSid, track.kind, participant.identity, participant.name, false, track);
+      // Only add if it's a real LiveKit Track with attach()
+      if (track && typeof track.attach === 'function') {
+        addTrack(publication.trackSid, track.kind, participant.identity, participant.name, false, track);
+      }
     });
 
     room.on(RoomEvent.TrackUnsubscribed, (_track, publication) => {
@@ -220,8 +227,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     });
 
     room.on(RoomEvent.LocalTrackPublished, (publication, participant) => {
-      if (publication.track) {
-        addTrack(publication.trackSid, publication.track.kind, participant.identity, participant.name || displayName, true, publication.track);
+      // publication.track is the LiveKit LocalTrack — validate before adding
+      const track = publication.track;
+      if (track && typeof track.attach === 'function') {
+        addTrack(publication.trackSid, track.kind, participant.identity, participant.name || displayName, true, track);
       }
     });
 
