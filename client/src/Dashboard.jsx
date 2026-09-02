@@ -500,33 +500,33 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
       {/* Quick Stat Cards */}
       <div className="dash-stats">
-        <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '12px' }}>
+        <div className="stat-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Active rooms</span>
-            <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'var(--surface-raised)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Video size={15} color="var(--accent)" />
+            <div className="stat-icon-box">
+              <Video size={16} />
             </div>
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>{rooms.length}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Ready for video calls</div>
         </div>
 
-        <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '12px' }}>
+        <div className="stat-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Media clips</span>
-            <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'var(--surface-raised)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Film size={15} color="var(--accent)" />
+            <div className="stat-icon-box">
+              <Film size={16} />
             </div>
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>{clips.length}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Streamable files</div>
         </div>
 
-        <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '12px' }}>
+        <div className="stat-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Room memories</span>
-            <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'var(--surface-raised)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Camera size={15} color="var(--accent)" />
+            <div className="stat-icon-box">
+              <Camera size={16} />
             </div>
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>{memories.length}</div>
@@ -595,7 +595,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span className="live-dot" title="Live room" />
-                      <span style={{ fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{room.name}</span>
+                      <span className="room-name-text" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{room.name}</span>
                       <span className="badge" style={{ textTransform: 'capitalize' }}>
                         {room.role}
                       </span>
@@ -613,10 +613,9 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
                       {room.role === 'owner' ? (
                         <button
-                          className="btn-ghost"
+                          className="btn-delete"
                           onClick={() => setDeletingRoomTarget(room)}
                           title="Delete room"
-                          style={{ color: 'var(--danger)' }}
                         >
                           <Trash2 size={16} />
                         </button>
@@ -790,12 +789,12 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                         <Eye size={14} />
                       </button>
                       <button
-                        className="btn-ghost"
+                        className="btn-delete"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteClip(clip.id);
                         }}
-                        style={{ padding: '6px', color: 'var(--danger)' }}
+                        style={{ padding: '6px' }}
                         title="Delete clip"
                       >
                         <Trash2 size={14} />
@@ -864,8 +863,8 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                     </a>
                     <button
                       onClick={() => handleDeleteMemory(mem.id)}
-                      className="btn-ghost"
-                      style={{ padding: '6px', color: 'var(--danger)' }}
+                      className="btn-delete"
+                      style={{ padding: '6px' }}
                       title="Delete memory"
                     >
                       <Trash2 size={14} />

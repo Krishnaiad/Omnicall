@@ -4,32 +4,41 @@
   --surface: #0F172A;         /* Cards and primary surfaces */
   --surface-raised: #151F32;  /* Secondary dark surface */
   --surface-elevated: #1E293B;/* Elevated surface (modals, popovers, menus) */
-  --surface-hover: rgba(59, 130, 246, 0.08); /* Subtle cool blue hover */
+  --surface-hover: #111D33;   /* Dark card hover */
+  --surface-hover-strong: #172554; /* Active/selected container */
 
   --text-primary: #F8FAFC;    /* Primary text */
   --text-secondary: #CBD5E1;  /* Secondary text */
-  --text-muted: #64748B;      /* Muted text */
+  --text-muted: #94A3B8;      /* Muted text */
   --border: #263449;          /* Subtle borders */
   --border-strong: #334155;   /* Active / focused borders */
+  --border-blue: #315DB5;     /* Blue border on hover */
 
   --accent: #3B82F6;          /* Primary interactive blue (lighter for dark mode) */
   --accent-hover: #60A5FA;    /* Hover state */
   --accent-active: #2563EB;   /* Active / pressed state */
   --accent-bg: #172554;       /* Primary dark tint */
+  --accent-ultra-light: #172554;
 
   --success: #22C55E;         /* Success (connected, online, completed) */
+  --success-hover: #16A34A;
   --success-bg: rgba(34, 197, 94, 0.15);
 
   --danger: #F87171;          /* Error / Danger (destructive only) */
   --danger-bg: rgba(248, 113, 113, 0.15);
+  --danger-border: rgba(248, 113, 113, 0.3);
 
   --warning: #FBBF24;         /* Warning (pending, attention-required) */
   --warning-bg: rgba(251, 191, 36, 0.15);
 
   --info: #60A5FA;            /* Information */
 
+  --card-hover-bg: #111D33;
   --card-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.5);
+  --card-hover-shadow: 0 6px 24px rgba(59, 130, 246, 0.15);
   --modal-shadow: 0 24px 38px 3px rgba(0, 0, 0, 0.7);
+  --btn-primary-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
+  --btn-primary-hover-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
 
   /* Backward-compatible aliases */
   --bg-dark: var(--bg);
@@ -48,32 +57,41 @@
   --surface: #FFFFFF;         /* Cards and primary surfaces */
   --surface-raised: #F1F5F9;  /* Secondary surface (inputs, panels, headers) */
   --surface-elevated: #FFFFFF;/* Elevated surface */
-  --surface-hover: #F0F5FF;   /* Very light bluish tone on hover */
+  --surface-hover: #F4F7FF;   /* Primary Ultra Light (subtle blue tint) */
+  --surface-hover-strong: #E8F0FF; /* Primary Light */
 
   --text-primary: #0F172A;    /* Primary text */
   --text-secondary: #475569;  /* Secondary text */
   --text-muted: #94A3B8;      /* Muted text */
   --border: #E2E8F0;          /* Subtle borders */
-  --border-strong: #CBD5E1;   /* Active / focused borders */
+  --border-strong: #D5DFEC;   /* Outline button border */
+  --border-blue: #BFD3FF;     /* Blue border on hover */
 
   --accent: #0B5CFF;          /* Main brand blue (Zoom-inspired modern SaaS) */
   --accent-hover: #0047D6;    /* Primary hover */
-  --accent-active: #0036A8;   /* Primary active/pressed */
+  --accent-active: #0039AD;   /* Primary active/pressed */
   --accent-bg: #E8F0FF;       /* Primary light tint (subtle blue backgrounds) */
+  --accent-ultra-light: #F4F7FF; /* Primary ultra light */
 
   --success: #16A34A;         /* Success */
+  --success-hover: #15803D;   /* Success hover */
   --success-bg: #DCFCE7;
 
   --danger: #DC2626;          /* Error / Danger */
-  --danger-bg: #FEE2E2;
+  --danger-bg: #FEF2F2;       /* Error light background */
+  --danger-border: #FECACA;   /* Error border on hover */
 
   --warning: #F59E0B;         /* Warning */
   --warning-bg: #FEF3C7;
 
   --info: #2563EB;            /* Information */
 
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(11, 92, 255, 0.03);
+  --card-hover-bg: #F8FAFF;
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --card-hover-shadow: 0 4px 14px rgba(11, 92, 255, 0.08);
   --modal-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
+  --btn-primary-shadow: 0 2px 6px rgba(11, 92, 255, 0.15);
+  --btn-primary-hover-shadow: 0 4px 12px rgba(11, 92, 255, 0.18);
 
   /* Backward-compatible aliases */
   --bg-dark: var(--bg);
@@ -144,15 +162,61 @@ input, select, textarea {
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--card-shadow);
-  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .glass-card:hover {
-  border-color: var(--border-strong);
+  background: var(--card-hover-bg);
+  border-color: var(--border-blue);
+  box-shadow: var(--card-hover-shadow);
+  transform: translateY(-1px);
 }
 
 .glass-card.active-card {
   border: 1.5px solid var(--accent);
+}
+
+/* Stat Cards (Section 5) */
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+  padding: 16px 20px;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.stat-card:hover {
+  background: var(--accent-ultra-light);
+  border-color: var(--border-blue);
+  box-shadow: var(--card-hover-shadow);
+  transform: translateY(-1px);
+}
+
+.stat-icon-box {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--accent-ultra-light);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.stat-card:hover .stat-icon-box {
+  background: var(--accent-bg);
+  color: var(--accent);
 }
 
 @keyframes spin {
@@ -279,12 +343,21 @@ input, select, textarea {
   color: var(--text-primary);
   font-size: 0.875rem;
   font-weight: 400;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.form-control:hover:not(:focus) {
+  background: var(--card-hover-bg);
+  border-color: var(--border-blue);
 }
 
 .form-control:focus {
+  background: var(--surface);
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-bg);
+  box-shadow: 0 0 0 3px rgba(11, 92, 255, 0.12);
 }
 
 /* Tier 1: Primary Button (One per section) */
@@ -301,14 +374,21 @@ input, select, textarea {
   font-size: 0.875rem;
   border-radius: 8px;
   border: none;
-  transition: background-color 150ms ease, transform 100ms ease;
+  box-shadow: var(--btn-primary-shadow);
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
+  box-shadow: var(--btn-primary-hover-shadow);
+  transform: translateY(-1px);
 }
 
 .btn-primary:active:not(:disabled) {
+  background: var(--accent-active);
   transform: scale(0.98);
 }
 
@@ -332,12 +412,18 @@ input, select, textarea {
   font-size: 0.875rem;
   border-radius: 8px;
   border: none;
-  transition: filter 150ms ease, transform 100ms ease;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.15);
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .btn-join:hover:not(:disabled),
 .btn-success:hover:not(:disabled) {
-  filter: brightness(1.08);
+  background: var(--success-hover);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.22);
+  transform: translateY(-1px);
 }
 
 .btn-join:active:not(:disabled),
@@ -361,18 +447,67 @@ input, select, textarea {
   font-weight: 500;
   font-size: 0.875rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.btn-secondary svg,
+.btn-outline svg {
+  color: var(--text-secondary);
+  transition: color 160ms ease;
 }
 
 .btn-secondary:hover:not(:disabled),
 .btn-outline:hover:not(:disabled) {
   background: var(--surface-hover);
-  border-color: var(--accent);
+  border-color: var(--border-blue);
+  color: var(--accent);
+  box-shadow: 0 2px 8px rgba(11, 92, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.btn-secondary:hover:not(:disabled) svg,
+.btn-outline:hover:not(:disabled) svg {
   color: var(--accent);
 }
 
 .btn-secondary:active:not(:disabled),
 .btn-outline:active:not(:disabled) {
+  background: var(--surface-hover-strong);
+  border-color: var(--accent);
+  transform: scale(0.98);
+}
+
+/* Destructive Button: Trash / Delete */
+.btn-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--danger);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.btn-delete:hover:not(:disabled) {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger);
+  transform: translateY(-1px);
+}
+
+.btn-delete:active:not(:disabled) {
   transform: scale(0.98);
 }
 
@@ -389,7 +524,7 @@ input, select, textarea {
   border-radius: 8px;
   font-weight: 500;
   font-size: 0.8125rem;
-  transition: background-color 150ms ease, color 150ms ease;
+  transition: background-color 160ms ease, color 160ms ease;
 }
 
 .btn-ghost:hover:not(:disabled) {
@@ -425,13 +560,23 @@ input, select, textarea {
   color: var(--text-secondary);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   cursor: pointer;
-  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
 }
 
 .theme-toggle-btn:hover {
   background: var(--surface-hover);
-  border-color: var(--accent);
+  border-color: var(--border-blue);
   color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.theme-toggle-btn:active {
+  background: var(--surface-hover-strong);
+  transform: scale(0.98);
 }
 
 .error-banner {
@@ -590,12 +735,27 @@ input, select, textarea {
   border-radius: 12px;
   margin-bottom: 12px;
   box-shadow: var(--card-shadow);
-  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .room-item:hover {
-  background: var(--surface-hover);
-  border-color: var(--accent);
+  background: var(--card-hover-bg);
+  border-color: var(--border-blue);
+  box-shadow: var(--card-hover-shadow);
+  transform: translateY(-1px);
+}
+
+.room-name-text {
+  color: var(--text-primary);
+  transition: color 160ms ease;
+}
+
+.room-item:hover .room-name-text {
+  color: var(--accent);
 }
 
 .room-main {
