@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { randomInt } from 'node:crypto';
 import { db, randomUUID } from './db.js';
 
 const router = Router();
@@ -45,8 +46,9 @@ export async function fetchUserBootstrapData(userId) {
   try {
     const [rooms, clips, memories] = await Promise.all([
       db.queryAll(
-        `SELECT r.id, r.name, r.created_at, rm.role,
-          (SELECT COUNT(*)::int FROM room_members WHERE room_id = r.id) AS member_count
+        `SELECT r.id, r.name, r.owner_id, r.created_at, rm.role,
+          (SELECT COUNT(*)::int FROM room_members WHERE room_id = r.id) AS member_count,
+          (SELECT COUNT(*)::int FROM live_sessions WHERE (room_id = r.id OR room_name = r.name) AND left_at IS NULL) AS active_count
          FROM rooms r
          JOIN room_members rm ON rm.room_id = r.id
          WHERE rm.user_id = $1
@@ -150,8 +152,8 @@ router.post('/send-otp', async (req, res) => {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
-    // Generate random 6-digit numeric OTP
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate cryptographically secure 6-digit numeric OTP
+    const otpCode = randomInt(100000, 1000000).toString();
     const otpId = randomUUID();
 
     // 10-minute expiry timestamp
@@ -470,13 +472,21 @@ export const invalidateUsersCache = () => { usersCache = null; };
 router.get('/users', requireAuth, async (req, res) => {
   try {
     const now = Date.now();
-    if (usersCache && (now - usersCacheTime < 30000)) {
-      return res.json({ users: usersCache });
+    let users = usersCache;
+    if (!users || (now - usersCacheTime >= 30000)) {
+      users = await db.queryAll('SELECT id, name, username, email, role, created_at FROM users ORDER BY created_at DESC');
+      usersCache = users;
+      usersCacheTime = now;
     }
-    const users = await db.queryAll('SELECT id, name, username, email, role, created_at FROM users ORDER BY created_at DESC');
-    usersCache = users;
-    usersCacheTime = now;
-    res.json({ users });
+    // Security: Only admins can see raw emails of all users. For others, mask email.
+    const sanitized = users.map(u => {
+      if (req.user.role === 'admin' || u.id === req.user.id) return u;
+      return {
+        ...u,
+        email: u.email ? u.email.replace(/(.{2})(.*)(?=@)/, (_match, a, b) => a + '*'.repeat(Math.max(b.length, 3))) : undefined,
+      };
+    });
+    res.json({ users: sanitized });
   } catch (err) {
     console.error('List users failed:', err);
     res.status(500).json({ error: 'Failed to fetch user directory' });

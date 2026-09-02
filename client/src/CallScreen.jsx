@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Room, RoomEvent, Track, LocalVideoTrack } from 'livekit-client';
-import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check, UserPlus, Pin, PinOff, Tv, Zap, ZapOff, Volume2, BarChart3, Hand, Edit2, MessageSquareQuote } from 'lucide-react';
+import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check, UserPlus, Pin, PinOff, Tv, Zap, ZapOff, Volume2, BarChart3, Hand, Edit2, MessageSquareQuote, StopCircle } from 'lucide-react';
 import MediaInjector from './MediaInjector.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import EffectsPicker, { VIDEO_FILTERS, VIRTUAL_BACKGROUNDS } from './EffectsPicker.jsx';
@@ -161,6 +161,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
   // ─── Room State Service UI States ──────────────────────────────────────────
   const [showWhiteboard, setShowWhiteboard] = useState(false);
+  const [whiteboardSession, setWhiteboardSession] = useState(null); // { presenterId, presenterName, isPresenter, isOwner }
   const [showPolls, setShowPolls] = useState(false);
   const [showHandRaise, setShowHandRaise] = useState(false);
   const [handRaiseCount, setHandRaiseCount] = useState(0);
@@ -179,7 +180,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   const roomRef = useRef(null);
   const screenTrackRef = useRef(null);
 
-  const isOwner = roomData.owner_id === user.id;
+  const isOwner = (roomData.owner_id && String(roomData.owner_id) === String(user.id)) || roomData.role === 'owner';
 
   const addTrack = useCallback((sid, kind, identity, name, isLocal, track) => {
     setTracks((prev) => {
@@ -295,6 +296,39 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
               setToastNotice('❌ The room creator denied your screen share request.');
               setTimeout(() => setToastNotice(null), 4000);
             }
+          }
+        } else if (topic === 'whiteboard-control') {
+          if (data.type === 'WHITEBOARD_START') {
+            const isMe = String(data.presenterId) === String(user.id);
+            setWhiteboardSession({
+              presenterId: data.presenterId,
+              presenterName: data.presenterName,
+              isPresenter: isMe,
+              isOwner: !!data.isOwner,
+            });
+            setShowWhiteboard(true);
+            if (!isMe) {
+              setToastNotice(`🎨 ${data.presenterName} started an Interactive Whiteboard presentation.`);
+              setTimeout(() => setToastNotice(null), 3500);
+            }
+          } else if (data.type === 'WHITEBOARD_OVERRIDE') {
+            const isMe = String(data.presenterId) === String(user.id);
+            setWhiteboardSession({
+              presenterId: data.presenterId,
+              presenterName: data.presenterName,
+              isPresenter: isMe,
+              isOwner: true,
+            });
+            setShowWhiteboard(true);
+            if (!isMe) {
+              setToastNotice(`👑 Room Creator (${data.presenterName}) took over the Whiteboard presentation.`);
+              setTimeout(() => setToastNotice(null), 3500);
+            }
+          } else if (data.type === 'WHITEBOARD_STOP') {
+            setWhiteboardSession(null);
+            setShowWhiteboard(false);
+            setToastNotice('Interactive Whiteboard presentation ended.');
+            setTimeout(() => setToastNotice(null), 2500);
           }
         }
       } catch (err) {
@@ -597,6 +631,76 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     setInjectingClip(false);
   };
 
+  const handleToggleWhiteboard = () => {
+    if (showWhiteboard) {
+      if (whiteboardSession?.isPresenter) {
+        sendDataPacket({ type: 'WHITEBOARD_STOP', presenterId: user.id }, 'whiteboard-control');
+        setWhiteboardSession(null);
+      }
+      setShowWhiteboard(false);
+      return;
+    }
+
+    if (!whiteboardSession) {
+      const session = {
+        presenterId: user.id,
+        presenterName: displayName,
+        isPresenter: true,
+        isOwner: isOwner,
+      };
+      setWhiteboardSession(session);
+      setShowWhiteboard(true);
+      sendDataPacket({
+        type: 'WHITEBOARD_START',
+        presenterId: user.id,
+        presenterName: displayName,
+        isOwner: isOwner,
+      }, 'whiteboard-control');
+    } else {
+      if (isOwner && !whiteboardSession.isPresenter) {
+        // Creator overrides and seizes exclusive control
+        const session = {
+          presenterId: user.id,
+          presenterName: displayName,
+          isPresenter: true,
+          isOwner: true,
+        };
+        setWhiteboardSession(session);
+        setShowWhiteboard(true);
+        sendDataPacket({
+          type: 'WHITEBOARD_OVERRIDE',
+          presenterId: user.id,
+          presenterName: displayName,
+          isOwner: true,
+        }, 'whiteboard-control');
+        setToastNotice('👑 You took over the Interactive Whiteboard as Room Creator.');
+        setTimeout(() => setToastNotice(null), 3500);
+      } else {
+        // Open in view-only presentation mode
+        setShowWhiteboard(true);
+      }
+    }
+  };
+
+  const handleTakeOverWhiteboard = () => {
+    if (!isOwner) return;
+    const session = {
+      presenterId: user.id,
+      presenterName: displayName,
+      isPresenter: true,
+      isOwner: true,
+    };
+    setWhiteboardSession(session);
+    sendDataPacket({
+      type: 'WHITEBOARD_OVERRIDE',
+      presenterId: user.id,
+      presenterName: displayName,
+      isOwner: true,
+    }, 'whiteboard-control');
+    setToastNotice('👑 You took over the Interactive Whiteboard.');
+    setTimeout(() => setToastNotice(null), 3000);
+  };
+
 
   const handleScreenShareClick = () => {
     if (isSharingScreen) {
@@ -604,7 +708,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       return;
     }
 
-    if (isOwner || isScreenShareApproved) {
+    if (isOwner || isScreenShareApproved || roomData.role === 'owner') {
+      setRequestSentNotice(false);
       startNativeScreenShare();
     } else {
       // Broadcast to ALL participants — isOwner check on the receive side already filters it.
@@ -615,6 +720,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   };
 
   const startNativeScreenShare = async () => {
+    setRequestSentNotice(false);
+    if (injectingClip) {
+      await handleStopTileStream();
+    }
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
@@ -771,7 +880,12 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             roomId={roomData.id}
             roomName={roomData.name}
             onStopPresentation={handleStopPresentation}
-            presenterTrack={sharedMedia ? videoTracks.find((t) => t.name === sharedMedia.presenterName && t.kind === 'video') : null}
+            presenterTrack={
+              sharedMedia
+                ? (videoTracks.find((t) => (t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName) && t.kind === 'video')?.track
+                   || videoTracks.find((t) => (t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName) && t.kind === 'video'))
+                : null
+            }
             dataSaverMode={dataSaverMode}
             isPresenterPip={isPresenterPip}
             onTogglePip={() => setIsPresenterPip(!isPresenterPip)}
@@ -878,8 +992,11 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             room={roomRef.current}
             roomId={roomData.id}
             isHost={isOwner}
+            isPresenter={whiteboardSession ? whiteboardSession.isPresenter : true}
+            presenterName={whiteboardSession?.presenterName}
+            onTakeOver={handleTakeOverWhiteboard}
             videoTracks={videoTracks}
-            onClose={() => setShowWhiteboard(false)}
+            onClose={handleToggleWhiteboard}
           />
         )}
 
@@ -968,8 +1085,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         {/* 🎨 Collaborative Whiteboard Button */}
         <button
           className={`control-btn ${showWhiteboard ? 'active' : ''}`}
-          onClick={() => setShowWhiteboard((prev) => !prev)}
-          title="Interactive Collaborative Whiteboard"
+          onClick={handleToggleWhiteboard}
+          title={whiteboardSession && !whiteboardSession.isPresenter ? `Viewing ${whiteboardSession.presenterName}'s Whiteboard` : "Interactive In-Call Whiteboard"}
+          style={showWhiteboard ? { background: '#6366f1', color: '#fff' } : {}}
         >
           <Edit2 size={20} />
         </button>
@@ -1023,6 +1141,17 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         >
           <Sparkles size={20} />
         </button>
+
+        {injectingClip && (
+          <button
+            className="control-btn"
+            onClick={handleStopTileStream}
+            title="Stop tile stream and restore camera"
+            style={{ background: '#ef4444', borderColor: '#f87171', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px', padding: '0 12px', fontSize: '0.8rem', fontWeight: 600 }}
+          >
+            <StopCircle size={18} /> Stop Tile
+          </button>
+        )}
 
         <button
           className={`control-btn ${injectingClip ? 'active' : ''}`}

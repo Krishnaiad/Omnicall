@@ -210,6 +210,15 @@ async function addColumnIfMissing(table, column, type) {
   }
 }
 
+const INDEX_STATEMENTS = [
+  'CREATE INDEX IF NOT EXISTS idx_chat_room_created ON chat_messages(room_id, created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id)',
+  'CREATE INDEX IF NOT EXISTS idx_media_user_created ON media_files(user_id, created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_memories_user_created ON room_memories(user_id, created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_otps_email ON verification_otps(email)',
+  'CREATE INDEX IF NOT EXISTS idx_whiteboard_room ON whiteboard_strokes(room_id)',
+];
+
 async function initTables() {
   try {
     for (const stmt of TABLE_STATEMENTS) {
@@ -219,6 +228,10 @@ async function initTables() {
     await addColumnIfMissing('media_files', 'storage_provider', "TEXT DEFAULT 'local'");
     await addColumnIfMissing('media_files', 'storage_key', 'TEXT');
     await addColumnIfMissing('media_files', 'public_url', 'TEXT');
+
+    for (const idxStmt of INDEX_STATEMENTS) {
+      await db.exec(idxStmt).catch(() => {});
+    }
   } catch (err) {
     console.warn('[DB] Table initialization notice:', err.message);
   }

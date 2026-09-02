@@ -593,9 +593,24 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               {rooms.map((room) => (
                 <div key={room.id} className="room-item">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span className="live-dot" title="Live room" />
-                      <span className="room-name-text" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{room.name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      {room.active_count > 0 ? (
+                        <>
+                          <span className="live-dot" title={`${room.active_count} participant(s) live`} />
+                          <span className="room-name-text" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{room.name}</span>
+                          <span className="badge" style={{ color: 'var(--success)', background: 'var(--success-bg)', border: '1px solid rgba(22,163,74,0.2)' }}>
+                            {room.active_count} live
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)', display: 'inline-block' }} title="No one in room" />
+                          <span className="room-name-text" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{room.name}</span>
+                          <span className="badge" style={{ color: 'var(--danger)', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', fontSize: '0.7rem' }}>
+                            No one in room
+                          </span>
+                        </>
+                      )}
                       <span className="badge" style={{ textTransform: 'capitalize' }}>
                         {room.role}
                       </span>

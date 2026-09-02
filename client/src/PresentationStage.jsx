@@ -14,10 +14,20 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
   const pipRef = useRef(null);
 
   useEffect(() => {
-    if (pipRef.current && presenterTrack) {
-      presenterTrack.attach(pipRef.current);
+    const el = pipRef.current;
+    const track = presenterTrack?.track || presenterTrack;
+    if (el && track && typeof track.attach === 'function') {
+      try {
+        track.attach(el);
+      } catch (err) {
+        console.warn('[PresentationStage] Failed to attach presenter track:', err);
+      }
       return () => {
-        presenterTrack.detach(pipRef.current);
+        if (typeof track.detach === 'function') {
+          try {
+            track.detach(el);
+          } catch {}
+        }
       };
     }
   }, [presenterTrack, showPip]);

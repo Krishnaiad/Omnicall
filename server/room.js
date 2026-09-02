@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { db, randomUUID } from './db.js';
-import { requireAuth } from './auth.js';
+import { requireAuth, requireAdmin } from './auth.js';
 import { notifyUser } from './notifications.js';
 
 const router = Router();
@@ -134,8 +134,8 @@ async function isMember(roomId, userId) {
   return !!row;
 }
 
-// LiveKit Diagnostic Endpoint to verify credentials against LiveKit Cloud
-router.get('/debug-livekit', async (req, res) => {
+// LiveKit Diagnostic Endpoint to verify credentials against LiveKit Cloud (Admin Only)
+router.get('/debug-livekit', requireAdmin, async (req, res) => {
   const { apiKey, apiSecret, httpUrl } = getLiveKitCredentials();
 
   if (!apiKey || !apiSecret || !httpUrl) {
@@ -214,7 +214,8 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const rooms = await db.queryAll(
-      `SELECT rooms.id, rooms.name, rooms.owner_id, room_members.role, rooms.created_at
+      `SELECT rooms.id, rooms.name, rooms.owner_id, room_members.role, rooms.created_at,
+        (SELECT COUNT(*)::int FROM live_sessions WHERE (room_id = rooms.id OR room_name = rooms.name) AND left_at IS NULL) AS active_count
        FROM rooms
        JOIN room_members ON room_members.room_id = rooms.id
        WHERE room_members.user_id = $1

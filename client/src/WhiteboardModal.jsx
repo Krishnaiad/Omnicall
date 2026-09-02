@@ -11,10 +11,16 @@ function MiniVideoTile({ trackItem }) {
 
   useEffect(() => {
     const el = elRef.current;
-    if (!trackItem?.track || !el) return;
-    trackItem.track.attach(el);
+    if (!trackItem?.track || !el || typeof trackItem.track.attach !== 'function') return;
+    try {
+      trackItem.track.attach(el);
+    } catch {}
     return () => {
-      trackItem.track.detach(el);
+      if (typeof trackItem.track?.detach === 'function') {
+        try {
+          trackItem.track.detach(el);
+        } catch {}
+      }
     };
   }, [trackItem?.track]);
 
@@ -28,7 +34,7 @@ function MiniVideoTile({ trackItem }) {
   );
 }
 
-export default function WhiteboardModal({ token, room, roomId, isHost, videoTracks = [], onClose }) {
+export default function WhiteboardModal({ token, room, roomId, isHost, videoTracks = [], onClose, isPresenter = true, presenterName = '', onTakeOver }) {
   const canvasRef = useRef(null);
   const isDrawingRef = useRef(false);
   const currentStrokeRef = useRef([]);
@@ -232,9 +238,27 @@ export default function WhiteboardModal({ token, room, roomId, isHost, videoTrac
     <div className="modal-backdrop" style={{ zIndex: 1200 }}>
       <div className="glass-card" style={{ width: '95vw', maxWidth: '1100px', height: '90vh', display: 'flex', flexDirection: 'column', padding: '14px', overflow: 'hidden' }}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1rem', color: '#a5b4fc' }}>
-            <Edit2 size={18} color="#818cf8" /> Interactive In-Call Whiteboard
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '1rem', color: '#a5b4fc' }}>
+              <Edit2 size={18} color="#818cf8" /> Interactive In-Call Whiteboard
+            </div>
+            {presenterName && (
+              <span className="badge" style={{ background: isPresenter ? 'var(--accent-bg)' : 'rgba(255,255,255,0.1)', color: isPresenter ? 'var(--accent)' : '#cbd5e1', fontSize: '0.75rem', fontWeight: 600 }}>
+                {isPresenter ? '🎨 You are Presenting' : `✏️ ${presenterName} is Presenting (View-Only)`}
+              </span>
+            )}
+            {!isPresenter && isHost && onTakeOver && (
+              <button
+                type="button"
+                onClick={onTakeOver}
+                className="btn-outline"
+                style={{ padding: '3px 8px', fontSize: '0.75rem', color: '#f59e0b', borderColor: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px' }}
+                title="Room Creator Authority: Take over presentation"
+              >
+                👑 Take Over
+              </button>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -263,9 +287,11 @@ export default function WhiteboardModal({ token, room, roomId, isHost, videoTrac
               <Download size={13} /> Export PNG
             </button>
 
-            <button className="btn-outline danger" onClick={handleClear} title="Clear Canvas" style={{ padding: '5px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)' }}>
-              <Trash2 size={13} /> Clear
-            </button>
+            {isPresenter && (
+              <button className="btn-outline danger" onClick={handleClear} title="Clear Canvas" style={{ padding: '5px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)' }}>
+                <Trash2 size={13} /> Clear
+              </button>
+            )}
 
             <button onClick={onClose} style={{ background: 'transparent', color: 'var(--text-muted)', marginLeft: '6px' }}>
               <X size={18} />
@@ -286,72 +312,81 @@ export default function WhiteboardModal({ token, room, roomId, isHost, videoTrac
         )}
 
         {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap', background: 'rgba(0,0,0,0.3)', padding: '6px 12px', borderRadius: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <button
-              type="button"
-              className={`btn-outline ${!isEraser ? 'active' : ''}`}
-              onClick={() => setIsEraser(false)}
-              style={{ padding: '3px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-            >
-              <Edit2 size={12} /> Pen
-            </button>
-            <button
-              type="button"
-              className={`btn-outline ${isEraser ? 'active' : ''}`}
-              onClick={() => setIsEraser(true)}
-              style={{ padding: '3px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-            >
-              <Eraser size={12} /> Eraser
-            </button>
-          </div>
+        {isPresenter ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap', background: 'rgba(0,0,0,0.3)', padding: '6px 12px', borderRadius: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button
+                type="button"
+                className={`btn-outline ${!isEraser ? 'active' : ''}`}
+                onClick={() => setIsEraser(false)}
+                style={{ padding: '3px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Edit2 size={12} /> Pen
+              </button>
+              <button
+                type="button"
+                className={`btn-outline ${isEraser ? 'active' : ''}`}
+                onClick={() => setIsEraser(true)}
+                style={{ padding: '3px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Eraser size={12} /> Eraser
+              </button>
+            </div>
 
-          {!isEraser && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Color:</span>
-              {COLORS.map((c) => (
+            {!isEraser && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Color:</span>
+                {COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setSelectedColor(c)}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      borderRadius: '50%',
+                      background: c,
+                      border: selectedColor === c ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
+                      transform: selectedColor === c ? 'scale(1.15)' : 'none',
+                      cursor: 'pointer',
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Size:</span>
+              {SIZES.map((s) => (
                 <button
-                  key={c}
+                  key={s}
                   type="button"
-                  onClick={() => setSelectedColor(c)}
+                  onClick={() => setSelectedSize(s)}
                   style={{
-                    width: '18px',
-                    height: '18px',
-                    borderRadius: '50%',
-                    background: c,
-                    border: selectedColor === c ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
-                    transform: selectedColor === c ? 'scale(1.15)' : 'none',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    background: selectedSize === s ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)',
+                    color: selectedSize === s ? '#a5b4fc' : 'var(--text-muted)',
+                    border: selectedSize === s ? '1px solid #818cf8' : '1px solid transparent',
+                    fontSize: '0.7rem',
                     cursor: 'pointer',
                   }}
-                />
+                >
+                  {s}px
+                </button>
               ))}
             </div>
-          )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Size:</span>
-            {SIZES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSelectedSize(s)}
-                style={{
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  background: selectedSize === s ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)',
-                  color: selectedSize === s ? '#a5b4fc' : 'var(--text-muted)',
-                  border: selectedSize === s ? '1px solid #818cf8' : '1px solid transparent',
-                  fontSize: '0.7rem',
-                  cursor: 'pointer',
-                }}
-              >
-                {s}px
-              </button>
-            ))}
+            {loading && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>Syncing canvas…</span>}
           </div>
-
-          {loading && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>Syncing canvas…</span>}
-        </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', background: 'rgba(0,0,0,0.2)', padding: '6px 12px', borderRadius: '10px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+              Viewing live presentation from <strong>{presenterName || 'Presenter'}</strong>. Drawing is locked to the active presenter.
+            </span>
+            {loading && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Syncing canvas…</span>}
+          </div>
+        )}
 
         {/* Canvas Element */}
         <div style={{ flex: 1, position: 'relative', background: '#070a13', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden' }}>
@@ -359,14 +394,14 @@ export default function WhiteboardModal({ token, room, roomId, isHost, videoTrac
             ref={canvasRef}
             width={1600}
             height={900}
-            style={{ width: '100%', height: '100%', cursor: isEraser ? 'cell' : 'crosshair', display: 'block' }}
-            onMouseDown={handleStartDraw}
-            onMouseMove={handleDrawMove}
-            onMouseUp={handleEndDraw}
-            onMouseLeave={handleEndDraw}
-            onTouchStart={handleStartDraw}
-            onTouchMove={handleDrawMove}
-            onTouchEnd={handleEndDraw}
+            style={{ width: '100%', height: '100%', cursor: isPresenter ? (isEraser ? 'cell' : 'crosshair') : 'default', display: 'block' }}
+            onMouseDown={isPresenter ? handleStartDraw : undefined}
+            onMouseMove={isPresenter ? handleDrawMove : undefined}
+            onMouseUp={isPresenter ? handleEndDraw : undefined}
+            onMouseLeave={isPresenter ? handleEndDraw : undefined}
+            onTouchStart={isPresenter ? handleStartDraw : undefined}
+            onTouchMove={isPresenter ? handleDrawMove : undefined}
+            onTouchEnd={isPresenter ? handleEndDraw : undefined}
           />
         </div>
       </div>
