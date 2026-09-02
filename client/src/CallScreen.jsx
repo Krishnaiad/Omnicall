@@ -179,6 +179,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
   const roomRef = useRef(null);
   const screenTrackRef = useRef(null);
+  const screenLkTrackRef = useRef(null);
 
   const isOwner = (roomData.owner_id && String(roomData.owner_id) === String(user.id)) || roomData.role === 'owner';
 
@@ -226,6 +227,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
       // Only add if it's a real LiveKit Track with attach()
       if (track && typeof track.attach === 'function') {
+        // Exclude screen share tracks from normal participant camera grid (handled by presentation stage)
+        if (publication.source === Track.Source.ScreenShare || track.source === Track.Source.ScreenShare || publication.trackName === 'screen-share') {
+          return;
+        }
         addTrack(publication.trackSid, track.kind, participant.identity, participant.name, false, track);
       }
     });
@@ -238,6 +243,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       // publication.track is the LiveKit LocalTrack — validate before adding
       const track = publication.track;
       if (track && typeof track.attach === 'function') {
+        // Exclude screen share tracks from normal participant camera grid (handled by presentation stage)
+        if (publication.source === Track.Source.ScreenShare || track.source === Track.Source.ScreenShare || publication.trackName === 'screen-share') {
+          return;
+        }
         addTrack(publication.trackSid, track.kind, participant.identity, participant.name || displayName, true, track);
       }
     });
@@ -593,13 +602,35 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     setShowInjector(false);
   };
 
-  const handleStopPresentation = () => {
-    if (isSharingScreen && screenTrackRef.current) {
-      screenTrackRef.current.stop();
+  const handleStopPresentation = async () => {
+    if (screenTrackRef.current) {
+      try { screenTrackRef.current.stop(); } catch {}
       screenTrackRef.current = null;
-      setIsSharingScreen(false);
     }
 
+    if (screenLkTrackRef.current && roomRef.current?.localParticipant) {
+      try {
+        await roomRef.current.localParticipant.unpublishTrack(screenLkTrackRef.current, true);
+      } catch (err) {
+        console.warn('Error unpublishing screen track:', err);
+      }
+      try { screenLkTrackRef.current.stop(); } catch {}
+      screenLkTrackRef.current = null;
+    }
+
+    // Also sweep any remaining screen share publications
+    if (roomRef.current?.localParticipant) {
+      for (const pub of roomRef.current.localParticipant.videoTrackPublications.values()) {
+        if (pub.source === Track.Source.ScreenShare || pub.trackName === 'screen-share' || pub.track?.source === Track.Source.ScreenShare) {
+          try {
+            await roomRef.current.localParticipant.unpublishTrack(pub.track, true);
+          } catch {}
+          removeTrack(pub.trackSid);
+        }
+      }
+    }
+
+    setIsSharingScreen(false);
     setSharedMedia(null);
     sendDataPacket({ type: 'PRESENTATION_MEDIA', media: null }, 'meeting-control');
 
@@ -738,8 +769,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       };
 
       if (roomRef.current && videoTrack) {
-        const lkTrack = new LocalVideoTrack(videoTrack);
-        await roomRef.current.localParticipant.publishTrack(lkTrack);
+        const lkTrack = new LocalVideoTrack(videoTrack, { name: 'screen-share' });
+        screenLkTrackRef.current = lkTrack;
+        await roomRef.current.localParticipant.publishTrack(lkTrack, { source: Track.Source.ScreenShare });
       }
 
       setIsSharingScreen(true);
