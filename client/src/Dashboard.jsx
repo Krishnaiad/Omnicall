@@ -436,23 +436,21 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
             <button
               className="btn-outline"
               onClick={handleOpenAdminDirectory}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'rgba(236, 72, 153, 0.5)', color: '#f472b6', background: 'rgba(236, 72, 153, 0.1)', fontWeight: 600 }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             >
               <Users size={15} /> User Directory
             </button>
           )}
 
-
           <button
             className="btn-outline"
             onClick={handleOpenProfileModal}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'rgba(99, 102, 241, 0.4)', color: '#a5b4fc' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <UserCheck size={15} /> Profile (@{user?.username || 'user'})
           </button>
 
-
-          <button className="btn-outline" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'rgba(239,68,68,0.3)', color: '#fca5a5' }}>
+          <button className="btn-outline" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <LogOut size={15} /> Logout
           </button>
         </div>
@@ -460,31 +458,31 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
       {/* Quick Stat Cards */}
       <div className="dash-stats">
-        <div className="glass-card" style={{ padding: '18px', borderRadius: '14px', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+        <div className="glass-card" style={{ padding: '18px', borderRadius: '14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>ACTIVE ROOMS</span>
-            <Video size={18} color="#818cf8" />
+            <Video size={18} color="var(--text-muted)" />
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff' }}>{rooms.length}</div>
-          <div style={{ fontSize: '0.75rem', color: '#a5b4fc', marginTop: '4px' }}>Ready for Instant Video Calls</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Ready for Instant Video Calls</div>
         </div>
 
-        <div className="glass-card" style={{ padding: '18px', borderRadius: '14px', border: '1px solid rgba(236, 72, 153, 0.2)' }}>
+        <div className="glass-card" style={{ padding: '18px', borderRadius: '14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>MEDIA CLIPS</span>
-            <Film size={18} color="#ec4899" />
+            <Film size={18} color="var(--text-muted)" />
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff' }}>{clips.length}</div>
-          <div style={{ fontSize: '0.75rem', color: '#f472b6', marginTop: '4px' }}>Cloudinary CDN Streamable</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Cloudinary CDN Streamable</div>
         </div>
 
-        <div className="glass-card" style={{ padding: '18px', borderRadius: '14px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+        <div className="glass-card" style={{ padding: '18px', borderRadius: '14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>ROOM MEMORIES</span>
-            <Camera size={18} color="#10b981" />
+            <Camera size={18} color="var(--text-muted)" />
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff' }}>{memories.length}</div>
-          <div style={{ fontSize: '0.75rem', color: '#6ee7b7', marginTop: '4px' }}>Saved Call Snapshots</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Saved Call Snapshots</div>
         </div>
       </div>
 
@@ -513,10 +511,10 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
       {/* Main Grid: Video Rooms + Media Injector */}
       <div className="dash-sections">
         {/* Video Rooms Box */}
-        <div className="glass-card section-box" style={{ border: '1px solid rgba(129, 140, 248, 0.2)' }}>
+        <div className="glass-card section-box">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 700, color: '#fff' }}>
-              <Video size={20} color="#818cf8" /> Your Video Rooms
+              <Video size={20} color="var(--text-muted)" /> Your Video Rooms
             </div>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Unique Names Enforced</span>
           </div>
@@ -530,7 +528,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               maxLength={80}
               style={{ borderRadius: '10px' }}
             />
-            <button type="submit" className="btn-primary" style={{ width: 'auto', padding: '0 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', background: 'linear-gradient(135deg, #6366f1, #4f46e5)' }}>
+            <button type="submit" className="btn-primary" style={{ width: 'auto', padding: '0 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
               <Plus size={18} /> Create
             </button>
           </form>
@@ -538,7 +536,10 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
           {loadingRooms ? (
             <p style={{ color: 'var(--text-muted)' }}>Loading rooms...</p>
           ) : rooms.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No rooms joined yet. Create one above to get started!</p>
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <Video size={32} color="var(--text-muted)" style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No rooms joined yet. Create one above to get started!</p>
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {rooms.map((room) => (
@@ -620,16 +621,16 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         </div>
 
         {/* Server Media Library Box */}
-        <div className="glass-card section-box" style={{ border: '1px solid rgba(236, 72, 153, 0.2)' }}>
+        <div className="glass-card section-box">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 700, color: '#fff' }}>
-              <Film size={20} color="#ec4899" /> Media Library Injector
+              <Film size={20} color="var(--text-muted)" /> Media Library Injector
             </div>
             {clips.length > 0 && (
               <button
                 type="button"
                 onClick={handleDeleteAllClips}
-                style={{ background: 'transparent', color: '#f87171', border: 'none', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                style={{ background: 'transparent', color: 'var(--danger)', border: 'none', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
                 <Trash2 size={12} /> Clear All
               </button>
@@ -642,18 +643,21 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
           <form onSubmit={handleUploadClip} style={{ marginBottom: '16px' }}>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mp3,audio/wav"
-                className="form-control"
-                style={{ fontSize: '0.8125rem', padding: '6px', borderRadius: '10px', flex: 1 }}
-                onChange={handleFileSelect}
-              />
+              <div className="file-input-wrapper" style={{ flex: 1 }}>
+                <div className="btn-outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%', borderRadius: '10px', borderStyle: 'dashed' }}>
+                  <Upload size={14} /> {selectedFile ? selectedFile.name : 'Choose File...'}
+                </div>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mp3,audio/wav"
+                  onChange={handleFileSelect}
+                />
+              </div>
               <button
                 type="submit"
                 className="btn-primary"
                 disabled={!selectedFile || uploading}
-                style={{ width: 'auto', padding: '8px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', background: 'linear-gradient(135deg, #ec4899, #818cf8)' }}
+                style={{ width: 'auto', padding: '8px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
               >
                 <Upload size={16} /> {uploading ? 'Uploading...' : 'Upload'}
               </button>
@@ -661,17 +665,17 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
             {/* Instant Upload Preview Card */}
             {previewUrl && selectedFile && (
-              <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(0,0,0,0.4)', borderRadius: '10px', border: '1px solid rgba(236, 72, 153, 0.3)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(0,0,0,0.4)', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', alignItems: 'center', gap: '12px' }}>
                 {selectedFile.type.startsWith('image/') ? (
                   <img src={previewUrl} alt="Preview" style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '6px' }} />
                 ) : (
                   <video src={previewUrl} style={{ width: '60px', height: '45px', objectFit: 'cover', borderRadius: '6px' }} />
                 )}
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={selectedFile.name}>
                     {selectedFile.name}
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: '#ec4899' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                     {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • Ready to upload
                   </div>
                 </div>
@@ -680,7 +684,10 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
           </form>
 
           {clips.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No media uploaded yet.</p>
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <Film size={32} color="var(--text-muted)" style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No media uploaded yet.</p>
+            </div>
           ) : (
             <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {clips.map((clip) => {
@@ -700,19 +707,21 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                     }}
                   >
                     <div
-                      style={{ overflow: 'hidden', marginRight: '8px', cursor: 'pointer', flex: 1 }}
+                      style={{ overflow: 'hidden', marginRight: '8px', cursor: 'pointer', flex: 1, minWidth: 0 }}
                       onClick={() => setSelectedMediaPreview(clip)}
                       title="Click to preview file"
                     >
-                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {clip.name}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={clip.name}>
+                          {clip.name}
+                        </span>
                         {isCloudinary && (
-                          <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.4)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
                             <Cloud size={9} /> Cloudinary CDN
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: '#a5b4fc', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Eye size={12} /> Click to Preview • {clip.mimeType}
                       </div>
                     </div>
@@ -748,10 +757,10 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
       </div>
 
       {/* ─── 📸 Room Memories & Snapshots Block ─── */}
-      <div className="glass-card section-box" style={{ border: '1px solid rgba(16, 185, 129, 0.25)', marginTop: '24px' }}>
+      <div className="glass-card section-box" style={{ marginTop: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 700, color: '#fff' }}>
-            <Camera size={20} color="#10b981" /> 📸 Room Memories & Call Snapshots
+            <Camera size={20} color="var(--text-muted)" /> Room Memories & Call Snapshots
           </div>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{memories.length} Moments Saved</span>
         </div>
@@ -764,6 +773,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
           <p style={{ color: 'var(--text-muted)' }}>Loading your saved memories...</p>
         ) : memories.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '28px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            <Camera size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
             No memories saved yet! When you take a snapshot in a call, click <strong>"Save to Memories"</strong> to preserve the moment here.
           </div>
         ) : (

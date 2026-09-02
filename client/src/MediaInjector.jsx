@@ -152,8 +152,8 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
       <img ref={imageRef} style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: '10px', height: '10px' }} alt="" />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#f472b6', fontSize: '1rem' }}>
-          <Film size={18} color="#ec4899" /> Media & Presentation Stage
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: 'var(--text-main)', fontSize: '1rem' }}>
+          <Film size={18} color="var(--text-muted)" /> Media & Presentation Stage
         </div>
         <button onClick={onClose} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
           <X size={18} />
@@ -161,23 +161,26 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
       </div>
 
       {/* In-Call Direct File Upload Box */}
-      <form onSubmit={handleInCallUpload} style={{ padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(236,72,153,0.3)', marginBottom: '14px' }}>
-        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f472b6', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+      <form onSubmit={handleInCallUpload} style={{ padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '14px' }}>
+        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
           <Upload size={13} /> Upload & Share New File Right Now:
         </div>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mp3"
-            className="form-control"
-            style={{ fontSize: '0.75rem', padding: '5px 8px', flex: 1, borderRadius: '6px' }}
-            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-          />
+          <div className="file-input-wrapper" style={{ flex: 1 }}>
+            <div className="btn-outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%', borderRadius: '6px', borderStyle: 'dashed' }}>
+              <Upload size={14} /> {selectedFile ? selectedFile.name : 'Choose File...'}
+            </div>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mp3"
+              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+            />
+          </div>
           <button
             type="submit"
             disabled={!selectedFile || uploading}
             className="btn-primary"
-            style={{ width: 'auto', padding: '5px 12px', fontSize: '0.75rem', borderRadius: '6px', background: 'linear-gradient(135deg, #ec4899, #818cf8)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+            style={{ width: 'auto', padding: '5px 12px', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
           >
             {uploading ? 'Uploading...' : 'Present'}
           </button>
@@ -190,7 +193,7 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
           Or select a previously uploaded file:
         </p>
-        <label style={{ fontSize: '0.75rem', color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+        <label style={{ fontSize: '0.75rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
           <input type="checkbox" checked={isTileLooping} onChange={(e) => setIsTileLooping(e.target.checked)} />
           Loop Tile Stream
         </label>
@@ -217,17 +220,17 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
                   gap: '6px',
                   padding: '8px 10px',
                   borderRadius: '8px',
-                  background: isPlayingInTile ? 'rgba(236, 72, 153, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-                  border: isPlayingInTile ? '1px solid rgba(236, 72, 153, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
+                  background: isPlayingInTile ? 'rgba(124, 58, 237, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                  border: isPlayingInTile ? '1px solid rgba(124, 58, 237, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
                 }}
               >
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#fff' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#fff' }} title={clip.name}>
                   {clip.name} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>({clip.mimeType})</span>
                 </div>
 
                 <div style={{ display: 'flex', gap: '6px' }}>
                   {isPlayingInTile ? (
-                    <button className="btn-outline" onClick={handleStopTileStream} style={{ flex: 1, padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', color: '#f472b6' }}>
+                    <button className="btn-outline" onClick={handleStopTileStream} style={{ flex: 1, padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', color: 'var(--danger)', borderColor: 'var(--danger)' }}>
                       <StopCircle size={13} /> Stop Tile
                     </button>
                   ) : (
@@ -239,7 +242,7 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
                   <button
                     className="btn-primary"
                     onClick={() => handleSharePresentation(clip)}
-                    style={{ flex: 1, padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', background: 'linear-gradient(135deg, #ec4899, #818cf8)' }}
+                    style={{ flex: 1, padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
                   >
                     <Monitor size={13} /> Present Stage
                   </button>
