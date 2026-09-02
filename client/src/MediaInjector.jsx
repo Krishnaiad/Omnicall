@@ -31,33 +31,45 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
     loadClips();
   }, [token]);
 
-  // Direct In-Call File Upload
+  // Direct In-Call File Upload — INSTANT local preview, CDN upload in background
   const handleInCallUpload = async (e) => {
     e.preventDefault();
     if (!selectedFile) return;
-    setUploading(true);
     setError('');
     setSuccess('');
 
+    // ─── STEP 1: Show local preview INSTANTLY (no waiting for CDN) ───
+    const localUrl = URL.createObjectURL(selectedFile);
+    if (onSharePresentation) {
+      // Share immediately so presenter sees content right away
+      // blob: URLs only work for the local presenter — viewers see a "Loading" state
+      onSharePresentation(localUrl, selectedFile.name, selectedFile.type, true /* isLocalPreview */);
+    }
+    setSuccess('⚡ Presenting instantly! Uploading to CDN for others...');
+    setUploading(true);
+
+    // ─── STEP 2: Upload to CDN in the background ───
     const formData = new FormData();
     formData.append('clip', selectedFile);
+    const capturedFile = selectedFile;
+    setSelectedFile(null); // Clear selection immediately for better UX
 
     try {
       const res = await api.uploadClip(token, formData);
-      setSelectedFile(null);
-      setSuccess('Uploaded! Sharing to call stage...');
       await loadClips();
-      
-      // Auto-broadcast the newly uploaded file to the presentation stage
+
+      // ─── STEP 3: Replace local blob URL with permanent CDN URL for all participants ───
       if (res.file) {
-        const streamUrl = res.file.publicUrl || api.getStreamUrl(token, res.file.id);
+        const cdnUrl = res.file.publicUrl || api.getStreamUrl(token, res.file.id);
         if (onSharePresentation) {
-          onSharePresentation(streamUrl, res.file.name, res.file.mimeType);
+          onSharePresentation(cdnUrl, res.file.name, res.file.mimeType, false /* not local */);
         }
+        URL.revokeObjectURL(localUrl); // Clean up blob URL
       }
+      setSuccess('✅ CDN upload done — all participants can now see the presentation!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.message);
+      setError(`CDN upload failed: ${err.message}. Presenter view still active.`);
     } finally {
       setUploading(false);
     }

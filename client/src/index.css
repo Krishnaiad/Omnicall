@@ -78,6 +78,10 @@ input, select {
   border-color: rgba(255, 255, 255, 0.12);
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Auth Container */
 .auth-container {
   display: flex;

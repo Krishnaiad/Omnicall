@@ -433,14 +433,25 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   };
 
 
-  const handleSharePresentation = (mediaUrl, mediaName, mediaType) => {
-    const mediaObj = { mediaUrl, mediaName, mediaType, presenterName: displayName };
+  const handleSharePresentation = (mediaUrl, mediaName, mediaType, isLocalPreview = false) => {
+    const mediaObj = { mediaUrl, mediaName, mediaType, presenterName: displayName, isLocalPreview };
+    
+    // Always update the presenter's own view immediately
     setSharedMedia(mediaObj);
-    sendDataPacket({ type: 'PRESENTATION_MEDIA', media: mediaObj }, 'meeting-control');
 
-    // ── Point 3 Fix: Store presentation in SFU metadata so late joiners recover state ──
-    if (roomRef.current?.localParticipant?.setMetadata) {
-      roomRef.current.localParticipant.setMetadata(JSON.stringify({ presenting: mediaObj })).catch(() => {});
+    if (isLocalPreview) {
+      // blob: URLs are local-only — don't broadcast to others yet.
+      // Broadcast a "pending" placeholder so viewers see a loading state.
+      const pendingObj = { mediaUrl: null, mediaName, mediaType, presenterName: displayName, isPending: true };
+      sendDataPacket({ type: 'PRESENTATION_MEDIA', media: pendingObj }, 'meeting-control');
+    } else {
+      // CDN URL — broadcast to everyone normally
+      sendDataPacket({ type: 'PRESENTATION_MEDIA', media: mediaObj }, 'meeting-control');
+
+      // Store in SFU metadata so late joiners recover state
+      if (roomRef.current?.localParticipant?.setMetadata) {
+        roomRef.current.localParticipant.setMetadata(JSON.stringify({ presenting: mediaObj })).catch(() => {});
+      }
     }
 
     setShowInjector(false);

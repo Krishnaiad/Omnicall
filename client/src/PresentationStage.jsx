@@ -24,6 +24,19 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
 
   if (!media) return null;
 
+  // Viewer pending state — presenter is still uploading to CDN
+  if (media.isPending && !isPresenter) {
+    return (
+      <div className="presentation-stage-container" style={{ padding: '24px', textAlign: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', color: 'var(--text-muted)' }}>
+          <div style={{ width: '32px', height: '32px', border: '3px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>Presentation Loading</div>
+          <div style={{ fontSize: '0.8rem' }}>{media.presenterName} is preparing a file — it will appear here in a moment.</div>
+        </div>
+      </div>
+    );
+  }
+
   const isImage = media.mediaType && (media.mediaType.startsWith('image/') || (media.mediaUrl && media.mediaUrl.match(/\.(png|jpe?g|webp|gif)$/i)));
   const isVideo = media.mediaType && media.mediaType.startsWith('video/') && !media.mediaType.includes('screenshare');
   const isScreenshare = media.mediaType === 'video/screenshare';
