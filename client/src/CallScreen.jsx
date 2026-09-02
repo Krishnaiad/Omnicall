@@ -299,12 +299,20 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             setSharedMedia(null);
           }
         } else if (topic === 'screen-share-perm') {
-          if (data.type === 'REQUEST' && isOwner && participant.identity !== user.id) {
-            setPendingPermissionRequest({
-              requesterUserId: participant.identity,
-              requesterName: data.requesterName,
-            });
+          if (data.type === 'REQUEST' && isOwner) {
+            // Guard: don't show popup for your own request (compare as strings since identity may differ from DB id)
+            const requesterId = String(data.requesterUserId || '');
+            const myId = String(user.id);
+            if (requesterId !== myId && participant?.identity !== roomRef.current?.localParticipant?.identity) {
+              setPendingPermissionRequest({
+                requesterUserId: participant.identity, // LiveKit identity string for routing the response back
+                requesterName: data.requesterName,
+              });
+            }
           } else if (data.type === 'RESPONSE') {
+            // Only act if this response is addressed to me (by LiveKit identity)
+            const myIdentity = roomRef.current?.localParticipant?.identity;
+            if (data.forUserId && data.forUserId !== myIdentity) break; // not for me
             setRequestSentNotice(false);
             if (data.allowed) {
               setIsScreenShareApproved(true);
@@ -547,7 +555,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     if (isOwner || isScreenShareApproved) {
       startNativeScreenShare();
     } else {
-      sendDataPacket({ type: 'REQUEST', requesterName: displayName }, 'screen-share-perm', [roomData.owner_id]);
+      // Broadcast to ALL participants — isOwner check on the receive side already filters it.
+      // Using destinationIdentities with a DB integer ID was causing silent packet drops.
+      sendDataPacket({ type: 'REQUEST', requesterName: displayName, requesterUserId: String(user.id) }, 'screen-share-perm');
       setRequestSentNotice(true);
     }
   };
@@ -589,7 +599,11 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
   const handleRespondPermission = (allowed) => {
     if (pendingPermissionRequest) {
-      sendDataPacket({ type: 'RESPONSE', allowed }, 'screen-share-perm', [pendingPermissionRequest.requesterUserId]);
+      // Broadcast response to all — the receiving side checks if the response is meant for them
+      sendDataPacket(
+        { type: 'RESPONSE', allowed, forUserId: pendingPermissionRequest.requesterUserId },
+        'screen-share-perm'
+      );
       setPendingPermissionRequest(null);
     }
   };
