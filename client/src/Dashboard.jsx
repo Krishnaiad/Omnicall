@@ -1,9 +1,19 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from './api.js';
 import { prefetchCallScreen } from './App.jsx';
-import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive, Image as ImageIcon, Download, Search, CheckCircle2, Sparkles, Camera, Eye } from 'lucide-react';
+import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive, Image as ImageIcon, Download, Search, CheckCircle2, Sparkles, Camera, Eye, Sun, Moon } from 'lucide-react';
 
 export default function Dashboard({ token, user, initialBootstrap, onLogout, onJoinCall, onUserUpdate }) {
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('theme') || 'dark';
+  });
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    localStorage.setItem('theme', nextTheme);
+  };
   const [rooms, setRooms] = useState(() => initialBootstrap?.rooms || []);
   const [clips, setClips] = useState(() => {
     const raw = initialBootstrap?.clips || [];
@@ -418,36 +428,49 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
     <div className="dashboard-layout">
       {/* Top Responsive Navbar */}
-      <nav className="dashboard-nav glass-card" style={{ border: '1px solid rgba(129, 140, 248, 0.25)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+      <nav className="dashboard-nav glass-card">
         <div className="brand-header-box" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ background: 'linear-gradient(135deg, #6366f1, #ec4899)', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(99, 102, 241, 0.4)' }}>
-            <Video size={22} color="#fff" />
+          <div style={{ background: 'var(--accent-bg)', color: 'var(--accent)', border: '0.5px solid var(--border)', padding: '10px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Video size={20} />
           </div>
           <div>
-            <div className="brand-title">OmniCall Workspace</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-              <Radio size={12} color="#10b981" /> Real-Time WebRTC Platform
+            <div className="brand-title" style={{ color: 'var(--text-primary)', fontWeight: 500, fontSize: '1.25rem' }}>OmniCall Workspace</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+              <span className="live-dot" style={{ width: '6px', height: '6px' }} /> Real-time WebRTC platform
             </div>
           </div>
         </div>
 
-        <div className="user-badge">
+        <div className="user-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            className="theme-toggle-btn"
+            onClick={toggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
+            aria-label="Toggle dark/light theme"
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+
           {isAdmin && (
             <button
               className="btn-outline"
               onClick={handleOpenAdminDirectory}
               style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              <Users size={15} /> User Directory
+              <Users size={15} /> User directory
             </button>
           )}
 
           <button
             className="btn-outline"
             onClick={handleOpenProfileModal}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            <UserCheck size={15} /> Profile (@{user?.username || 'user'})
+            <div className="avatar-circle" style={{ width: '22px', height: '22px', fontSize: '0.65rem' }}>
+              {(user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
+            </div>
+            <span>@{user?.username || 'user'}</span>
           </button>
 
           <button className="btn-outline" onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -458,31 +481,31 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
       {/* Quick Stat Cards */}
       <div className="dash-stats">
-        <div className="glass-card" style={{ padding: '18px', borderRadius: '14px' }}>
+        <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>ACTIVE ROOMS</span>
-            <Video size={18} color="var(--text-muted)" />
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Active rooms</span>
+            <Video size={16} color="var(--text-muted)" />
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff' }}>{rooms.length}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Ready for Instant Video Calls</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 500, color: 'var(--text-primary)' }}>{rooms.length}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Ready for video calls</div>
         </div>
 
-        <div className="glass-card" style={{ padding: '18px', borderRadius: '14px' }}>
+        <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>MEDIA CLIPS</span>
-            <Film size={18} color="var(--text-muted)" />
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Media clips</span>
+            <Film size={16} color="var(--text-muted)" />
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff' }}>{clips.length}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Cloudinary CDN Streamable</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 500, color: 'var(--text-primary)' }}>{clips.length}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Streamable files</div>
         </div>
 
-        <div className="glass-card" style={{ padding: '18px', borderRadius: '14px' }}>
+        <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.5px' }}>ROOM MEMORIES</span>
-            <Camera size={18} color="var(--text-muted)" />
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Room memories</span>
+            <Camera size={16} color="var(--text-muted)" />
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff' }}>{memories.length}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Saved Call Snapshots</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 500, color: 'var(--text-primary)' }}>{memories.length}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Saved call snapshots</div>
         </div>
       </div>
 
@@ -543,52 +566,41 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {rooms.map((room) => (
-                <div
-                  key={room.id}
-                  style={{
-                    padding: '14px',
-                    borderRadius: '12px',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '10px',
-                  }}
-                >
+                <div key={room.id} className="room-item">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <span style={{ fontSize: '1rem', fontWeight: 700, color: '#fff', marginRight: '8px' }}>{room.name}</span>
-                      <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '9999px', fontWeight: 700, textTransform: 'uppercase', background: room.role === 'owner' ? 'rgba(236,72,153,0.2)' : 'rgba(99,102,241,0.2)', color: room.role === 'owner' ? '#f472b6' : '#a5b4fc', border: room.role === 'owner' ? '1px solid rgba(236,72,153,0.4)' : '1px solid rgba(99,102,241,0.4)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="live-dot" title="Live room" />
+                      <span style={{ fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>{room.name}</span>
+                      <span className="badge" style={{ textTransform: 'capitalize' }}>
                         {room.role}
                       </span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <button
-                        className="btn-primary"
-                        style={{ width: 'auto', padding: '6px 14px', borderRadius: '8px', fontSize: '0.8125rem', background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        className="btn-join"
                         onClick={() => promptJoin(room)}
                         onMouseEnter={prefetchCallScreen}
                         onFocus={prefetchCallScreen}
                       >
-                        <Video size={14} /> Join Call
+                        <Video size={14} /> Join call
                       </button>
 
                       {room.role === 'owner' ? (
                         <button
-                          className="btn-outline"
+                          className="btn-ghost"
                           onClick={() => setDeletingRoomTarget(room)}
-                          title="Delete Room permanently (Owner Only)"
-                          style={{ padding: '6px 10px', borderRadius: '8px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(239,68,68,0.1)' }}
+                          title="Delete room"
+                          style={{ color: 'var(--danger)' }}
                         >
                           <Trash2 size={16} />
                         </button>
                       ) : (
                         <button
-                          className="btn-outline"
+                          className="btn-ghost"
                           onClick={() => setLeavingRoomTarget(room)}
-                          title="Leave Room"
-                          style={{ padding: '6px 10px', borderRadius: '8px', color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.4)', background: 'rgba(245,158,11,0.1)' }}
+                          title="Leave room"
+                          style={{ color: 'var(--warning)' }}
                         >
                           <LogOut size={16} />
                         </button>
@@ -597,17 +609,17 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                   </div>
 
                   {room.role === 'owner' && (
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
                       <input
                         className="form-control"
                         placeholder="Invite user by username or email..."
-                        style={{ fontSize: '0.8125rem', padding: '6px 12px', borderRadius: '8px' }}
+                        style={{ fontSize: '0.8125rem' }}
                         value={inviteEmail[room.id] || ''}
                         onChange={(e) => setInviteEmail((prev) => ({ ...prev, [room.id]: e.target.value }))}
                       />
                       <button
                         className="btn-outline"
-                        style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                        style={{ padding: '6px 12px', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}
                         onClick={() => handleInvite(room.id)}
                       >
                         <UserPlus size={14} /> Invite
@@ -623,22 +635,23 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         {/* Server Media Library Box */}
         <div className="glass-card section-box">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 700, color: '#fff' }}>
-              <Film size={20} color="var(--text-muted)" /> Media Library Injector
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+              <Film size={20} color="var(--text-muted)" /> Media library
             </div>
             {clips.length > 0 && (
               <button
                 type="button"
+                className="btn-ghost"
                 onClick={handleDeleteAllClips}
-                style={{ background: 'transparent', color: 'var(--danger)', border: 'none', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                style={{ color: 'var(--danger)', fontSize: '0.75rem', padding: '4px 8px' }}
               >
-                <Trash2 size={12} /> Clear All
+                <Trash2 size={12} /> Clear all
               </button>
             )}
           </div>
 
-          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
-            Upload Images (PNG, JPG), Videos (MP4), or Audio (MP3) up to 100MB to stream directly into your call tile!
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+            Upload images, videos, or audio to stream directly into your call tile.
           </p>
 
           <form onSubmit={handleUploadClip} style={{ marginBottom: '16px' }}>
@@ -649,10 +662,10 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                 alignItems: 'center',
                 gap: '8px',
                 padding: '8px 14px',
-                borderRadius: '10px',
-                border: '1px dashed rgba(255,255,255,0.2)',
-                background: 'rgba(255,255,255,0.03)',
-                color: selectedFile ? 'var(--text-main)' : 'var(--text-muted)',
+                borderRadius: '8px',
+                border: '1px dashed var(--border-strong)',
+                background: 'var(--surface-raised)',
+                color: selectedFile ? 'var(--text-primary)' : 'var(--text-secondary)',
                 fontSize: '0.875rem',
                 cursor: 'pointer',
                 overflow: 'hidden',
@@ -660,7 +673,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               }}>
                 <Upload size={15} style={{ flexShrink: 0 }} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {selectedFile ? selectedFile.name : 'Choose File to Upload...'}
+                  {selectedFile ? selectedFile.name : 'Choose file to upload...'}
                 </span>
                 <input
                   type="file"
@@ -673,22 +686,22 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                 type="submit"
                 className="btn-primary"
                 disabled={!selectedFile || uploading}
-                style={{ width: 'auto', padding: '8px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                style={{ width: 'auto', whiteSpace: 'nowrap' }}
               >
-                <Upload size={16} /> {uploading ? 'Uploading...' : 'Upload'}
+                <Upload size={15} /> {uploading ? 'Uploading...' : 'Upload'}
               </button>
             </div>
 
             {/* Instant Upload Preview Card */}
             {previewUrl && selectedFile && (
-              <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(0,0,0,0.4)', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ marginTop: '10px', padding: '10px', background: 'var(--surface-raised)', borderRadius: '8px', border: '0.5px solid var(--border)', display: 'flex', alignItems: 'center', gap: '12px' }}>
                 {selectedFile.type.startsWith('image/') ? (
-                  <img src={previewUrl} alt="Preview" style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '6px' }} />
+                  <img src={previewUrl} alt="Preview" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px' }} />
                 ) : (
-                  <video src={previewUrl} style={{ width: '60px', height: '45px', objectFit: 'cover', borderRadius: '6px' }} />
+                  <video src={previewUrl} style={{ width: '56px', height: '42px', objectFit: 'cover', borderRadius: '6px' }} />
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={selectedFile.name}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={selectedFile.name}>
                     {selectedFile.name}
                   </div>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
@@ -702,7 +715,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
           {clips.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
               <Film size={32} color="var(--text-muted)" style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No media uploaded yet.</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No media uploaded yet.</p>
             </div>
           ) : (
             <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -715,11 +728,11 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      background: 'rgba(255, 255, 255, 0.03)',
-                      border: '1px solid rgba(255, 255, 255, 0.08)',
-                      transition: 'all 0.2s ease',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      background: 'var(--surface)',
+                      border: '0.5px solid var(--border)',
+                      transition: 'background-color 150ms ease',
                     }}
                   >
                     <div
@@ -728,39 +741,39 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                       title="Click to preview file"
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={clip.name}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={clip.name}>
                           {clip.name}
                         </span>
                         {isCloudinary && (
-                          <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
-                            <Cloud size={9} /> Cloudinary CDN
+                          <span className="neutral-badge" style={{ flexShrink: 0 }}>
+                            <Cloud size={10} /> Cloudinary CDN
                           </span>
                         )}
                       </div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Eye size={12} /> Click to Preview • {clip.mimeType}
+                        <Eye size={12} /> Click to preview • {clip.mimeType}
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <button
-                        className="btn-outline"
+                        className="btn-ghost"
                         onClick={() => setSelectedMediaPreview(clip)}
-                        title="Preview Media"
-                        style={{ padding: '5px 8px', borderRadius: '6px', color: '#818cf8', borderColor: 'rgba(99, 102, 241, 0.4)' }}
+                        title="Preview media"
+                        style={{ padding: '6px' }}
                       >
-                        <Eye size={13} />
+                        <Eye size={14} />
                       </button>
                       <button
-                        className="btn-outline"
+                        className="btn-ghost"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteClip(clip.id);
                         }}
-                        style={{ padding: '5px 8px', borderRadius: '6px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
-                        title="Delete Clip"
+                        style={{ padding: '6px', color: 'var(--danger)' }}
+                        title="Delete clip"
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
@@ -775,22 +788,22 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
       {/* ─── 📸 Room Memories & Snapshots Block ─── */}
       <div className="glass-card section-box" style={{ marginTop: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 700, color: '#fff' }}>
-            <Camera size={20} color="var(--text-muted)" /> Room Memories & Call Snapshots
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+            <Camera size={20} color="var(--text-muted)" /> Room memories & call snapshots
           </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{memories.length} Moments Saved</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{memories.length} saved</span>
         </div>
 
-        <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-          Snapshots and memory pictures captured during video meetings are saved here in full high-resolution for your account.
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+          Snapshots and memory pictures captured during video meetings are preserved here.
         </p>
 
         {loadingMemories ? (
           <p style={{ color: 'var(--text-muted)' }}>Loading your saved memories...</p>
         ) : memories.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '28px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+          <div style={{ textAlign: 'center', padding: '28px', background: 'var(--surface)', borderRadius: '12px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
             <Camera size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-            No memories saved yet! When you take a snapshot in a call, click <strong>"Save to Memories"</strong> to preserve the moment here.
+            No memories saved yet. When you take a snapshot in a call, click <strong>"Save to Memories"</strong> to preserve the moment here.
           </div>
         ) : (
           <div className="memories-grid">
@@ -805,7 +818,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                 />
                 <div className="memory-footer">
                   <div style={{ overflow: 'hidden', marginRight: '8px' }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {mem.caption || mem.roomName}
                     </div>
                     <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
@@ -818,19 +831,19 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                       download={`omnicall-memory-${mem.id}.png`}
                       target="_blank"
                       rel="noreferrer"
-                      className="btn-outline"
-                      style={{ padding: '4px 6px', borderRadius: '6px', color: '#818cf8', display: 'flex', alignItems: 'center' }}
-                      title="Download Image"
+                      className="btn-ghost"
+                      style={{ padding: '6px' }}
+                      title="Download image"
                     >
-                      <Download size={13} />
+                      <Download size={14} />
                     </a>
                     <button
                       onClick={() => handleDeleteMemory(mem.id)}
-                      className="btn-outline"
-                      style={{ padding: '4px 6px', borderRadius: '6px', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center' }}
-                      title="Delete Memory"
+                      className="btn-ghost"
+                      style={{ padding: '6px', color: 'var(--danger)' }}
+                      title="Delete memory"
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>

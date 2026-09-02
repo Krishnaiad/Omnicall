@@ -109,11 +109,11 @@ export default function EffectsPicker({ activeFilter, activeBg, onSelectFilter, 
   return (
     <div className="glass-card injector-popover" style={{ width: '400px', maxWidth: '92vw' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1rem', color: '#fff' }}>
-          <Sparkles size={18} color="#818cf8" /> Video Effects & Backgrounds
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+          <Sparkles size={18} color="var(--accent)" /> Video effects & backgrounds
         </div>
-        <button onClick={onClose} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
-          <X size={18} />
+        <button onClick={onClose} className="btn-ghost" style={{ padding: '4px' }}>
+          <X size={16} />
         </button>
       </div>
 
@@ -122,7 +122,7 @@ export default function EffectsPicker({ activeFilter, activeBg, onSelectFilter, 
         title={tierInfo.tip}
         style={{
           display: 'flex', alignItems: 'center', gap: '6px',
-          fontSize: '0.7rem', fontWeight: 600, color: tierInfo.color,
+          fontSize: '0.7rem', fontWeight: 500, color: tierInfo.color,
           background: `${tierInfo.color}18`, borderRadius: '6px',
           padding: '4px 8px', marginBottom: '12px', cursor: 'help',
         }}
@@ -137,7 +137,7 @@ export default function EffectsPicker({ activeFilter, activeBg, onSelectFilter, 
           className={`tab-btn ${tab === 'filters' ? 'active' : ''}`}
           onClick={() => setTab('filters')}
         >
-          <Sparkles size={14} style={{ display: 'inline', marginRight: '4px' }} /> 12 Video Filters
+          <Sparkles size={14} style={{ display: 'inline', marginRight: '4px' }} /> 12 Video filters
         </button>
         <button
           type="button"
