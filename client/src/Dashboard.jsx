@@ -356,7 +356,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
     setError('');
     setSuccess('');
     try {
-      await api.inviteUser(token, roomId, identifier);
+      await api.inviteToRoom(token, roomId, identifier);
       setInviteEmail((prev) => ({ ...prev, [roomId]: '' }));
       setSuccess(`Invited ${identifier} successfully!`);
     } catch (err) {
