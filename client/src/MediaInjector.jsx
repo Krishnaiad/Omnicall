@@ -144,10 +144,10 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
 
   return (
     <div className="glass-card injector-popover" style={{ width: '420px', maxWidth: '92vw', padding: '16px' }}>
-      {/* Hidden media elements for canvas/stream capture */}
-      <video ref={videoRef} style={{ display: 'none' }} playsInline muted />
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
-      <img ref={imageRef} style={{ display: 'none' }} alt="" />
+      {/* Hidden media elements for canvas/stream capture (opacity 0 avoids captureStream freeze on mobile/safari) */}
+      <video ref={videoRef} style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: '10px', height: '10px' }} playsInline muted />
+      <canvas ref={canvasRef} style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: '10px', height: '10px' }} />
+      <img ref={imageRef} style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: '10px', height: '10px' }} alt="" />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#f472b6', fontSize: '1rem' }}>
@@ -163,7 +163,7 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
         <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f472b6', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
           <Upload size={13} /> Upload & Share New File Right Now:
         </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mp3"

@@ -125,6 +125,12 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
               <X size={14} /> Stop Presentation
             </button>
           )}
+
+          {!isPresenter && manualPreview && (
+            <button className="btn-outline" onClick={() => setManualPreview(false)} style={{ padding: '4px 10px', fontSize: '0.75rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px', borderColor: 'rgba(245,158,11,0.4)' }}>
+              <X size={14} /> Close Preview
+            </button>
+          )}
         </div>
       </div>
 

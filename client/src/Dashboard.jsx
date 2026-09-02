@@ -60,6 +60,23 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
   const eventSourceRef = useRef(null);
   const isAdmin = user && user.role === 'admin';
 
+  // System Health Metrics State (Admin Only)
+  const [healthMetrics, setHealthMetrics] = useState(null);
+  const [loadingMetrics, setLoadingMetrics] = useState(false);
+
+  const fetchHealthMetrics = async () => {
+    if (!isAdmin) return;
+    setLoadingMetrics(true);
+    try {
+      const data = await api.get('/api/admin/health-metrics', token);
+      setHealthMetrics(data);
+    } catch (err) {
+      console.warn('Failed to fetch health metrics:', err.message);
+    } finally {
+      setLoadingMetrics(false);
+    }
+  };
+
   const fetchRooms = async () => {
     try {
       const data = await api.listRooms(token);
@@ -164,7 +181,10 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
     const interval = setInterval(() => {
       fetchRooms();
+      if (isAdmin) fetchHealthMetrics();
     }, 15000);
+
+    if (isAdmin && !healthMetrics) fetchHealthMetrics();
 
     return () => {
       if (es) {
@@ -412,13 +432,15 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         </div>
 
         <div className="user-badge">
-          <button
-            className="btn-outline"
-            onClick={handleOpenAdminDirectory}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'rgba(236, 72, 153, 0.5)', color: '#f472b6', background: 'rgba(236, 72, 153, 0.1)', fontWeight: 600 }}
-          >
-            <Users size={15} /> User Directory
-          </button>
+          {isAdmin && (
+            <button
+              className="btn-outline"
+              onClick={handleOpenAdminDirectory}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', borderColor: 'rgba(236, 72, 153, 0.5)', color: '#f472b6', background: 'rgba(236, 72, 153, 0.1)', fontWeight: 600 }}
+            >
+              <Users size={15} /> User Directory
+            </button>
+          )}
 
 
           <button
@@ -619,7 +641,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
           </p>
 
           <form onSubmit={handleUploadClip} style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mp3,audio/wav"
@@ -791,6 +813,66 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
           </div>
         )}
       </div>
+
+      {/* ─── 🛡️ System Health & Metrics (Admin Only) ─── */}
+      {isAdmin && (
+        <div className="glass-card section-box" style={{ border: '1px solid rgba(245, 158, 11, 0.25)', marginTop: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 700, color: '#f59e0b' }}>
+              <Activity size={20} color="#f59e0b" /> System Health & Metrics
+            </div>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Admin Visibility Only</span>
+          </div>
+
+          {!healthMetrics ? (
+            <p style={{ color: 'var(--text-muted)' }}>Loading system metrics...</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Uptime</div>
+                  <div style={{ fontSize: '1.1rem', color: '#fff', fontWeight: 600 }}>{Math.floor(healthMetrics.uptime / 60)} mins</div>
+                </div>
+                <div style={{ flex: 1, background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Requests</div>
+                  <div style={{ fontSize: '1.1rem', color: '#fff', fontWeight: 600 }}>{healthMetrics.metrics?.totalRequests || 0}</div>
+                </div>
+                <div style={{ flex: 1, background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Status Codes</div>
+                  <div style={{ fontSize: '0.85rem', color: '#fff' }}>
+                    <span style={{ color: '#10b981' }}>2xx: {healthMetrics.metrics?.statusBuckets['2xx'] || 0}</span> | 
+                    <span style={{ color: '#f59e0b', marginLeft: '6px' }}>4xx: {healthMetrics.metrics?.statusBuckets['4xx'] || 0}</span> | 
+                    <span style={{ color: '#ef4444', marginLeft: '6px' }}>5xx: {healthMetrics.metrics?.statusBuckets['5xx'] || 0}</span>
+                  </div>
+                </div>
+                {healthMetrics.dbPool && (
+                  <div style={{ flex: 1, background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Postgres Pool</div>
+                    <div style={{ fontSize: '0.85rem', color: '#fff' }}>
+                      Total: {healthMetrics.dbPool.totalCount} | Idle: {healthMetrics.dbPool.idleCount} | Wait: {healthMetrics.dbPool.waitingCount}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {healthMetrics.metrics?.recentErrors?.length > 0 && (
+                <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '12px', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '0.85rem', color: '#ef4444', fontWeight: 600, marginBottom: '8px' }}>Recent Errors (Last 50)</div>
+                  <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '0.75rem', color: '#fca5a5' }}>
+                    {healthMetrics.metrics.recentErrors.map((err, i) => (
+                      <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                        <span style={{ opacity: 0.7 }}>{new Date(err.timestamp).toLocaleTimeString()}</span> - 
+                        <strong> {err.method} {err.url} </strong> 
+                        (Status: {err.statusCode}) {err.userId ? `User: ${err.userId}` : ''}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* User Profile Edit Modal */}
       {showProfileModal && (
