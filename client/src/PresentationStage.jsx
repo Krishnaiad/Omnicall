@@ -1,15 +1,26 @@
-import { useState, useRef } from 'react';
-import { Monitor, X, Maximize2, Minimize2, RotateCcw, Download, Camera, Eye, FileText, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Monitor, X, Maximize2, Minimize2, RotateCcw, Download, Camera, Eye, FileText, User } from 'lucide-react';
 import { api } from './api.js';
 
-export default function PresentationStage({ media, isPresenter, token, roomId, roomName, onStopPresentation }) {
+export default function PresentationStage({ media, isPresenter, token, roomId, roomName, onStopPresentation, presenterTrack, dataSaverMode, isPresenterPip, onTogglePip }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLooping, setIsLooping] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [downloadNotice, setDownloadNotice] = useState('');
   const [manualPreview, setManualPreview] = useState(false);
+  const [showPip, setShowPip] = useState(true);
   const containerRef = useRef(null);
   const mediaRef = useRef(null);
+  const pipRef = useRef(null);
+
+  useEffect(() => {
+    if (pipRef.current && presenterTrack) {
+      presenterTrack.attach(pipRef.current);
+      return () => {
+        presenterTrack.detach(pipRef.current);
+      };
+    }
+  }, [presenterTrack, showPip]);
 
   if (!media) return null;
 
@@ -32,7 +43,6 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
     setDownloadNotice('');
 
     try {
-      // 1. Fetch headers to check 20MB limit
       const response = await fetch(media.mediaUrl, { method: 'GET' });
       const blob = await response.blob();
 
@@ -44,7 +54,6 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
         return;
       }
 
-      // 2. Download directly to user's local disk
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
@@ -54,7 +63,6 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
       document.body.removeChild(a);
       URL.revokeObjectURL(objectUrl);
 
-      // 3. Automatically save reference to user's personal Room Memories
       if (token) {
         await api.saveMemory(token, {
           roomId: roomId || null,
@@ -68,7 +76,6 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
       setTimeout(() => setDownloadNotice(''), 4000);
     } catch (err) {
       console.error('Download file error:', err);
-      // Fallback simple download
       const a = document.createElement('a');
       a.href = media.mediaUrl;
       a.download = media.mediaName || 'shared-file';
@@ -83,22 +90,59 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
     }
   };
 
-  // Show full player if: user is presenter, OR it's a live screen share, OR user explicitly clicked manual preview
   const showFullPlayer = isPresenter || isScreenshare || manualPreview;
 
+  const pipContainerStyle = isPresenterPip ? {
+    position: 'fixed',
+    bottom: '80px',
+    right: '20px',
+    width: '320px',
+    height: 'auto',
+    zIndex: 50,
+    borderRadius: '12px',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+    border: '2px solid #ec4899',
+    overflow: 'hidden',
+    backgroundColor: '#090d16'
+  } : {};
+
   return (
-    <div ref={containerRef} className={`presentation-stage-container ${isFullscreen ? 'fullscreen-stage' : ''}`}>
+    <div ref={containerRef} className={`presentation-stage-container ${isFullscreen ? 'fullscreen-stage' : ''}`} style={pipContainerStyle}>
       <div className="presentation-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
           <Monitor size={18} color="#ec4899" />
-          <span>Shared File: {media.mediaName}</span>
-          <span style={{ fontSize: '0.75rem', opacity: 0.8, color: '#a5b4fc', marginLeft: '8px' }}>
-            (Uploaded by {media.presenterName})
-          </span>
+          <span style={{ fontSize: isPresenterPip ? '0.75rem' : '1rem' }}>Shared: {media.mediaName}</span>
+          {!isPresenterPip && (
+            <span style={{ fontSize: '0.75rem', opacity: 0.8, color: '#a5b4fc', marginLeft: '8px' }}>
+              (Uploaded by {media.presenterName})
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {showFullPlayer && isVideo && (
+          {isPresenter && (
+            <button
+              className="btn-outline"
+              onClick={onTogglePip}
+              style={{ padding: '4px 8px', fontSize: '0.75rem', color: isPresenterPip ? '#3b82f6' : 'var(--text-muted)' }}
+              title="Toggle Your Presentation PIP"
+            >
+              {isPresenterPip ? <Maximize2 size={14} /> : <Minimize2 size={14} />} {isPresenterPip ? 'Maximize' : 'Minimize'}
+            </button>
+          )}
+
+          {presenterTrack && !isPresenterPip && (
+            <button
+              className="btn-outline"
+              onClick={() => setShowPip(!showPip)}
+              style={{ padding: '4px 8px', fontSize: '0.75rem', color: showPip ? '#10b981' : 'var(--text-muted)' }}
+              title="Toggle Presenter PIP"
+            >
+              <User size={14} /> {showPip ? 'Hide Presenter' : 'Show Presenter'}
+            </button>
+          )}
+
+          {showFullPlayer && isVideo && !isPresenterPip && (
             <button
               className="btn-outline"
               onClick={() => setIsLooping((prev) => !prev)}
@@ -134,7 +178,7 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
         </div>
       </div>
 
-      <div className="presentation-body" style={{ background: '#090d16', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px' }}>
+      <div className="presentation-body" style={{ background: '#090d16', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px', position: 'relative' }}>
         {showFullPlayer ? (
           isImage ? (
             <img
@@ -161,7 +205,6 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
             </div>
           )
         ) : (
-          /* Non-Presenter Download / Memory Card (Max 20MB limit enforced) */
           <div style={{ padding: '24px', textAlign: 'center', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(236,72,153,0.3)', width: '100%', maxWidth: '500px' }}>
             <FileText size={36} color="#ec4899" style={{ margin: '0 auto 12px' }} />
             <div style={{ fontSize: '1rem', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>
@@ -197,6 +240,11 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
                 <Eye size={15} /> Preview Here
               </button>
             </div>
+          </div>
+        )}
+        {showPip && presenterTrack && (
+          <div style={{ position: 'absolute', bottom: '16px', right: '16px', width: '120px', height: '90px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #10b981', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 10 }}>
+            <video ref={pipRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
         )}
       </div>

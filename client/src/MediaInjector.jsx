@@ -63,6 +63,8 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
     }
   };
 
+  const [isTileLooping, setIsTileLooping] = useState(false);
+
   // Option A: Tile Stream Injection (Image, Video, Audio)
   const handleTileStream = async (clip) => {
     if (!room) return;
@@ -90,7 +92,7 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
         const videoEl = videoRef.current;
         videoEl.crossOrigin = 'anonymous';
         videoEl.src = streamUrl;
-        videoEl.loop = true;
+        videoEl.loop = isTileLooping;
         await videoEl.play();
 
         const videoStream = videoEl.captureStream ? videoEl.captureStream(30) : videoEl.mozCaptureStream(30);
@@ -184,9 +186,15 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
         {success && <div style={{ fontSize: '0.7rem', color: '#6ee7b7', marginTop: '6px' }}>{success}</div>}
       </form>
 
-      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
-        Or select a previously uploaded file:
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+          Or select a previously uploaded file:
+        </p>
+        <label style={{ fontSize: '0.75rem', color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+          <input type="checkbox" checked={isTileLooping} onChange={(e) => setIsTileLooping(e.target.checked)} />
+          Loop Tile Stream
+        </label>
+      </div>
 
       {loading ? (
         <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>Loading media files...</p>

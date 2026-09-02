@@ -120,6 +120,15 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   // Shared Presentation Stage state
   const [sharedMedia, setSharedMedia] = useState(null);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const [isPresenterPip, setIsPresenterPip] = useState(false);
+
+  useEffect(() => {
+    if (sharedMedia && sharedMedia.presenterName === displayName) {
+      setIsPresenterPip(true);
+    } else {
+      setIsPresenterPip(false);
+    }
+  }, [sharedMedia, displayName]);
 
   // Double-Click Pin / Spotlight State
   const [pinnedTrackSid, setPinnedTrackSid] = useState(null);
@@ -620,6 +629,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             roomId={roomData.id}
             roomName={roomData.name}
             onStopPresentation={handleStopPresentation}
+            presenterTrack={sharedMedia ? videoTracks.find((t) => t.name === sharedMedia.presenterName && t.kind === 'video') : null}
+            dataSaverMode={dataSaverMode}
+            isPresenterPip={isPresenterPip}
+            onTogglePip={() => setIsPresenterPip(!isPresenterPip)}
           />
 
 
@@ -641,18 +654,33 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           )}
 
           {/* Participant Video Grid */}
-          <div className="video-grid" style={sharedMedia || pinnedTrack ? { gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', maxHeight: '180px' } : {}}>
+          <div 
+            className="video-grid" 
+            style={
+              ((sharedMedia && !isPresenterPip) || pinnedTrack) 
+                ? { display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '16px', maxHeight: '220px', padding: '16px' } 
+                : {}
+            }
+          >
             {unpinnedVideoTracks.map((item) => (
-              <TrackTile
-                key={item.sid}
-                item={item}
-                activeFilter={activeFilter}
-                activeBg={activeBg}
-                isPinned={false}
-                onTogglePin={() => setPinnedTrackSid(item.sid)}
-                isSpeaking={speakingIdentities.has(item.identity)}
-                isDataSaver={dataSaverMode}
-              />
+              <div 
+                key={item.sid} 
+                style={
+                  ((sharedMedia && !isPresenterPip) || pinnedTrack) 
+                    ? { width: '280px', height: '157px', flexShrink: 0 } 
+                    : { width: '100%', height: '100%' }
+                }
+              >
+                <TrackTile
+                  item={item}
+                  activeFilter={activeFilter}
+                  activeBg={activeBg}
+                  isPinned={false}
+                  onTogglePin={() => setPinnedTrackSid(item.sid)}
+                  isSpeaking={speakingIdentities.has(item.identity)}
+                  isDataSaver={dataSaverMode}
+                />
+              </div>
             ))}
           </div>
         </div>

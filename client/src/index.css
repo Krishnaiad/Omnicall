@@ -1,17 +1,17 @@
 :root {
-  --bg-dark: #070a13;
-  --bg-card: rgba(15, 23, 42, 0.75);
-  --bg-card-hover: rgba(30, 41, 59, 0.85);
-  --border-glow: rgba(99, 102, 241, 0.25);
-  --border-active: rgba(99, 102, 241, 0.6);
-  --primary: #6366f1;
-  --primary-hover: #4f46e5;
-  --accent: #ec4899;
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --danger: #ef4444;
-  --danger-hover: #dc2626;
-  --success: #10b981;
+  --bg-dark: #000000;
+  --bg-card: rgba(15, 15, 15, 0.6);
+  --bg-card-hover: rgba(24, 24, 27, 0.8);
+  --border-glow: rgba(255, 255, 255, 0.08);
+  --border-active: rgba(255, 255, 255, 0.15);
+  --primary: #006FEE; /* HeroUI Blue */
+  --primary-hover: #005bc4;
+  --accent: #7828C8; /* HeroUI Purple */
+  --text-main: #ECEDEE;
+  --text-muted: #A1A1AA;
+  --danger: #F31260;
+  --danger-hover: #C80E4F;
+  --success: #17C964;
   --font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
@@ -24,10 +24,11 @@
 body {
   font-family: var(--font-family);
   background-color: var(--bg-dark);
+  /* Sleek deep dark mesh gradient similar to HeroUI */
   background-image: 
-    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.18) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.15) 0px, transparent 50%),
-    radial-gradient(at 50% 50%, rgba(15, 23, 42, 0.9) 0px, transparent 100%);
+    radial-gradient(circle at 50% 120%, rgba(120, 40, 200, 0.15) 0%, transparent 60%),
+    radial-gradient(circle at 80% 80%, rgba(0, 111, 238, 0.1) 0%, transparent 40%);
+  background-attachment: fixed;
   color: var(--text-main);
   min-height: 100vh;
   overflow-x: hidden;
@@ -40,14 +41,14 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.2);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.5);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 button {
@@ -63,14 +64,14 @@ input, select {
   outline: none;
 }
 
-/* Glassmorphism Card */
+/* Glassmorphism Card (HeroUI Style) */
 .glass-card {
   background: var(--bg-card);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border-glow);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+  border-radius: 18px;
+  box-shadow: 0 4px 24px -4px rgba(0, 0, 0, 0.5);
 }
 
 /* Auth Container */
@@ -96,7 +97,7 @@ input, select {
 .auth-header h1 {
   font-size: clamp(1.6rem, 4vw, 2.1rem);
   font-weight: 800;
-  background: linear-gradient(135deg, #a5b4fc, #ec4899);
+  background: linear-gradient(90deg, #FF1CF7, #b249f8);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -0.5px;
@@ -149,9 +150,9 @@ input, select {
 .form-control {
   width: 100%;
   padding: 12px 14px;
-  background: rgba(15, 23, 42, 0.7);
+  background: rgba(24, 24, 27, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--text-main);
   font-size: 0.9375rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -159,22 +160,23 @@ input, select {
 
 .form-control:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 0 0 3px rgba(0, 111, 238, 0.2);
 }
 
 .btn-primary {
   width: 100%;
   padding: 12px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  background: var(--primary);
   color: #fff;
   font-weight: 600;
-  border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+  border-radius: 9999px; /* HeroUI Pill shape */
+  box-shadow: 0 4px 14px rgba(0, 111, 238, 0.4);
 }
 
 .btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 6px 22px rgba(99, 102, 241, 0.6);
+  box-shadow: 0 6px 20px rgba(0, 111, 238, 0.5);
 }
 
 .btn-primary:active:not(:disabled) {
@@ -240,7 +242,7 @@ input, select {
 .brand-title {
   font-size: clamp(1.2rem, 2.5vw, 1.6rem);
   font-weight: 800;
-  background: linear-gradient(135deg, #a5b4fc, #818cf8);
+  background: linear-gradient(90deg, #FF1CF7, #b249f8);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -0.5px;
@@ -263,13 +265,13 @@ input, select {
   border: 1px solid var(--border-glow);
   color: var(--text-main);
   padding: 8px 14px;
-  border-radius: 10px;
+  border-radius: 9999px; /* Pill */
   font-weight: 500;
   font-size: 0.85rem;
 }
 
 .btn-outline:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
   border-color: var(--border-active);
 }
 
@@ -313,15 +315,15 @@ input, select {
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
+  background: rgba(24, 24, 27, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
   margin-bottom: 12px;
   transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
 .room-item:hover {
-  border-color: rgba(99, 102, 241, 0.35);
+  border-color: rgba(0, 111, 238, 0.4); /* HeroUI blue border on hover */
   transform: translateY(-1px);
 }
 
@@ -405,7 +407,7 @@ input, select {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #050811;
+  background: #000000; /* Pure black for HeroUI vibe */
 }
 
 .call-header {
@@ -413,8 +415,8 @@ input, select {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(11, 15, 25, 0.95);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 10, 10, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   flex-wrap: wrap;
   gap: 8px;
 }
@@ -429,11 +431,11 @@ input, select {
 /* Shared Presentation Stage */
 .presentation-stage-container {
   margin: 12px 12px 0 12px;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(236, 72, 153, 0.35);
-  border-radius: 14px;
+  background: rgba(24, 24, 27, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
 }
 
 .presentation-stage-container.fullscreen-stage {
@@ -452,8 +454,8 @@ input, select {
 
 .presentation-header {
   padding: 10px 16px;
-  background: rgba(11, 15, 25, 0.9);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 10, 10, 0.8);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -467,20 +469,20 @@ input, select {
   align-items: center;
   max-height: clamp(240px, 45vh, 480px);
   padding: 12px;
-  background: #060913;
+  background: #000000;
 }
 
 .presentation-media-img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  border-radius: 10px;
+  border-radius: 12px;
 }
 
 .presentation-media-video {
   max-width: 100%;
   max-height: 100%;
-  border-radius: 10px;
+  border-radius: 12px;
 }
 
 /* Video Grid */
@@ -515,11 +517,11 @@ input, select {
   position: relative;
   width: 100%;
   aspect-ratio: 16/9;
-  background: #0f172a;
-  border-radius: 14px;
+  background: #0a0a0a;
+  border-radius: 16px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -599,8 +601,8 @@ input, select {
 /* In-call controls */
 .call-controls {
   padding: clamp(12px, 2vh, 18px);
-  background: rgba(11, 15, 25, 0.98);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 10, 10, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -611,35 +613,35 @@ input, select {
 .control-btn {
   width: clamp(40px, 4.5vw, 50px);
   height: clamp(40px, 4.5vw, 50px);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px; /* Pill/Circle */
+  background: rgba(255, 255, 255, 0.05);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .control-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.08);
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.05);
 }
 
 .control-btn.active {
   background: var(--primary);
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.6);
-  border-color: #a5b4fc;
+  box-shadow: 0 0 16px rgba(0, 111, 238, 0.4);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .control-btn.danger {
   background: var(--danger);
-  border-color: rgba(239, 68, 68, 0.6);
+  border-color: rgba(243, 18, 96, 0.5);
 }
 
 .control-btn.danger:hover {
   background: var(--danger-hover);
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.6);
+  box-shadow: 0 0 16px rgba(243, 18, 96, 0.5);
 }
 
 /* Snapshot Notification Banner */
