@@ -38,30 +38,30 @@
 }
 
 [data-theme="light"] {
-  --bg: #f8fafc;              /* Slate-50: crisp, clean neutral off-white */
+  --bg: #f8fafc;              /* Slate-50: crisp, clean modern canvas */
   --surface: #ffffff;         /* pure white cards */
-  --surface-raised: #f1f5f9;  /* Slate-100: clean elevated rows and button backgrounds */
+  --surface-raised: #f1f5f9;  /* Slate-100: elevated hover and controls */
   --text-primary: #0f172a;    /* Slate-900: sharp high-contrast text */
-  --text-secondary: #475569;  /* Slate-600: clear supporting copy */
-  --text-muted: #94a3b8;      /* Slate-400: subtle placeholder/metadata */
-  --border: #e2e8f0;          /* Slate-200: crisp border */
-  --border-strong: #cbd5e1;   /* Slate-300: solid divider border */
+  --text-secondary: #475569;  /* Slate-600: clean supporting copy */
+  --text-muted: #64748b;      /* Slate-500: readable metadata */
+  --border: #e2e8f0;          /* Slate-200: crisp clean card borders */
+  --border-strong: #cbd5e1;   /* Slate-300: solid interactive borders */
 
-  --accent: #6366f1;          /* vibrant indigo primary */
-  --accent-hover: #4f46e5;    /* darker indigo on hover */
-  --accent-bg: #eef2ff;       /* soft indigo badge tint */
+  --accent: #4f46e5;          /* vibrant Indigo 600: authoritative & cohesive */
+  --accent-hover: #4338ca;    /* Indigo 700 */
+  --accent-bg: #eef2ff;       /* soft Indigo tint */
 
-  --success: #10b981;         /* emerald green */
+  --success: #059669;         /* Emerald 600 */
   --success-bg: #ecfdf5;
 
-  --danger: #ef4444;          /* red */
+  --danger: #dc2626;          /* Red 600 */
   --danger-bg: #fef2f2;
 
-  --warning: #f59e0b;         /* amber */
+  --warning: #d97706;         /* Amber 600 */
   --warning-bg: #fffbeb;
 
-  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
-  --modal-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.03);
+  --modal-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
 
   /* Backward-compatible aliases */
   --bg-dark: var(--bg);
@@ -84,6 +84,8 @@
 body {
   font-family: var(--font-family);
   background-color: var(--bg);
+  background-image: radial-gradient(circle at 50% -10%, rgba(99, 102, 241, 0.07) 0%, transparent 60%);
+  background-repeat: no-repeat;
   color: var(--text-primary);
   min-height: 100vh;
   overflow-x: hidden;
@@ -340,18 +342,20 @@ input, select, textarea {
   gap: 6px;
   padding: 8px 14px;
   min-height: 38px;
-  background: transparent;
+  background: var(--surface);
   border: 1px solid var(--border-strong);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   border-radius: 8px;
   font-weight: 500;
   font-size: 0.875rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
 }
 
 .btn-secondary:hover:not(:disabled),
 .btn-outline:hover:not(:disabled) {
   background: var(--surface-raised);
+  border-color: var(--accent);
   color: var(--text-primary);
 }
 
@@ -402,17 +406,19 @@ input, select, textarea {
   justify-content: center;
   width: 38px;
   height: 38px;
-  background: transparent;
+  background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   color: var(--text-secondary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   cursor: pointer;
-  transition: background-color 150ms ease, color 150ms ease;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 
 .theme-toggle-btn:hover {
   background: var(--surface-raised);
-  color: var(--text-primary);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .error-banner {
@@ -473,23 +479,24 @@ input, select, textarea {
   letter-spacing: -0.3px;
 }
 
-/* User Profile Nav Button (Bigger & More Visible) */
+/* User Profile Nav Pill (Sleek, Compact, High Polish) */
 .user-profile-btn {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 14px 6px 8px;
-  min-height: 44px;
-  background: var(--surface-raised);
+  gap: 8px;
+  padding: 4px 12px 4px 6px;
+  min-height: 38px;
+  background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: 20px;
   color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   transition: background-color 150ms ease, border-color 150ms ease, transform 100ms ease;
   cursor: pointer;
 }
 
 .user-profile-btn:hover {
-  background: var(--surface);
+  background: var(--surface-raised);
   border-color: var(--accent);
 }
 
@@ -497,26 +504,28 @@ input, select, textarea {
   transform: scale(0.98);
 }
 
-/* Admin Directory Nav Button (Prominent) */
+/* Admin Directory Nav Button */
 .admin-directory-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  min-height: 44px;
-  background: var(--surface-raised);
+  gap: 6px;
+  padding: 6px 14px;
+  min-height: 38px;
+  background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--text-primary);
   font-weight: 500;
-  font-size: 0.9rem;
-  transition: background-color 150ms ease, border-color 150ms ease, transform 100ms ease;
+  font-size: 0.85rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 100ms ease;
   cursor: pointer;
 }
 
 .admin-directory-btn:hover {
-  background: var(--surface);
+  background: var(--surface-raised);
   border-color: var(--accent);
+  color: var(--accent);
 }
 
 .admin-directory-btn:active {

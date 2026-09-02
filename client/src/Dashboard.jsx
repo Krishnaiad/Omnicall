@@ -429,7 +429,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
     <div className="dashboard-layout">
       {/* Top Responsive Navbar */}
       <nav className="dashboard-nav glass-card">
-        {/* Left Side: Brand & Live Platform Status */}
+        {/* Left Side: Brand Logo & Status */}
         <div className="brand-header-box">
           <div style={{ background: 'var(--accent-bg)', color: 'var(--accent)', border: '0.5px solid var(--border)', padding: '10px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Video size={22} />
@@ -442,40 +442,19 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
           </div>
         </div>
 
-        {/* Center / Navigation: User Directory (Admin) & Profile Button (Bigger & Visible with Avatar) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        {/* Right Side: Cleanly Aligned Actions Toolbar (No floating center buttons) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {isAdmin && (
             <button
               className="admin-directory-btn"
               onClick={handleOpenAdminDirectory}
               title="Open User Directory (Admin only)"
             >
-              <Users size={18} color="var(--accent)" />
+              <Users size={16} />
               <span>User directory</span>
             </button>
           )}
 
-          <button
-            className="user-profile-btn"
-            onClick={handleOpenProfileModal}
-            title="Edit your profile"
-          >
-            <div className="avatar-circle" style={{ width: '36px', height: '36px', fontSize: '0.825rem', fontWeight: 600 }}>
-              {(user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left' }}>
-              <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>
-                {user?.name || `@${user?.username || 'user'}`}
-              </span>
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.2 }}>
-                {isAdmin ? 'Admin' : `@${user?.username || 'user'}`}
-              </span>
-            </div>
-          </button>
-        </div>
-
-        {/* Other Side (Right End): Theme Switcher & Logout */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             type="button"
             className="theme-toggle-btn"
@@ -486,13 +465,35 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </button>
 
+          <div style={{ width: '1px', height: '22px', background: 'var(--border-strong)', margin: '0 2px' }} />
+
+          {/* Profile Pill Button (Sleek single-line layout, round avatar) */}
+          <button
+            className="user-profile-btn"
+            onClick={handleOpenProfileModal}
+            title="Account profile & settings"
+          >
+            <div className="avatar-circle" style={{ width: '28px', height: '28px', fontSize: '0.75rem', fontWeight: 600, background: 'var(--accent)', color: '#ffffff', border: 'none' }}>
+              {(user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
+            </div>
+            <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+              {user?.name || `@${user?.username || 'user'}`}
+            </span>
+            {isAdmin && (
+              <span className="neutral-badge" style={{ fontSize: '0.65rem', padding: '1px 6px', background: 'var(--accent-bg)', color: 'var(--accent)', borderColor: 'transparent', fontWeight: 600 }}>
+                Admin
+              </span>
+            )}
+          </button>
+
           <button
             className="btn-outline"
             onClick={onLogout}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', minHeight: '38px', padding: '8px 14px' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', minHeight: '38px', padding: '6px 12px', fontSize: '0.85rem' }}
             title="Logout of OmniCall"
           >
-            <LogOut size={15} /> Logout
+            <LogOut size={15} />
+            <span>Logout</span>
           </button>
         </div>
       </nav>
@@ -502,28 +503,34 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Active rooms</span>
-            <Video size={16} color="var(--text-muted)" />
+            <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'var(--surface-raised)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Video size={15} color="var(--accent)" />
+            </div>
           </div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 500, color: 'var(--text-primary)' }}>{rooms.length}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Ready for video calls</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>{rooms.length}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Ready for video calls</div>
         </div>
 
         <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Media clips</span>
-            <Film size={16} color="var(--text-muted)" />
+            <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'var(--surface-raised)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Film size={15} color="var(--accent)" />
+            </div>
           </div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 500, color: 'var(--text-primary)' }}>{clips.length}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Streamable files</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>{clips.length}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Streamable files</div>
         </div>
 
         <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Room memories</span>
-            <Camera size={16} color="var(--text-muted)" />
+            <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'var(--surface-raised)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Camera size={15} color="var(--accent)" />
+            </div>
           </div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 500, color: 'var(--text-primary)' }}>{memories.length}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Saved call snapshots</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>{memories.length}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Saved call snapshots</div>
         </div>
       </div>
 
