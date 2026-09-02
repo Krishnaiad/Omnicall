@@ -165,28 +165,47 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
         <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
           <Upload size={13} /> Upload & Share New File Right Now:
         </div>
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          <div className="file-input-wrapper" style={{ flex: 1 }}>
-            <div className="btn-outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%', borderRadius: '6px', borderStyle: 'dashed' }}>
-              <Upload size={14} /> {selectedFile ? selectedFile.name : 'Choose File...'}
-            </div>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'stretch' }}>
+          <label style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            padding: '6px 10px',
+            borderRadius: '6px',
+            border: '1px dashed rgba(255,255,255,0.2)',
+            background: 'rgba(255,255,255,0.03)',
+            color: selectedFile ? 'var(--text-main)' : 'var(--text-muted)',
+            fontSize: '0.75rem',
+            fontWeight: 500,
+            cursor: 'pointer',
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            textOverflow: 'ellipsis',
+          }}>
+            <Upload size={13} style={{ flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {selectedFile ? selectedFile.name : 'Choose File...'}
+            </span>
             <input
               type="file"
               accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mp3"
               onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              style={{ display: 'none' }}
             />
-          </div>
+          </label>
           <button
             type="submit"
             disabled={!selectedFile || uploading}
             className="btn-primary"
-            style={{ width: 'auto', padding: '5px 12px', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+            style={{ width: 'auto', padding: '6px 14px', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
           >
             {uploading ? 'Uploading...' : 'Present'}
           </button>
         </div>
-        {error && <div style={{ fontSize: '0.7rem', color: '#f87171', marginTop: '6px' }}>{error}</div>}
-        {success && <div style={{ fontSize: '0.7rem', color: '#6ee7b7', marginTop: '6px' }}>{success}</div>}
+        {error && <div style={{ fontSize: '0.7rem', color: 'var(--danger)', marginTop: '6px' }}>{error}</div>}
+        {success && <div style={{ fontSize: '0.7rem', color: 'var(--success)', marginTop: '6px' }}>{success}</div>}
       </form>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>

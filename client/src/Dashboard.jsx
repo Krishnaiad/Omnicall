@@ -642,17 +642,33 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
           </p>
 
           <form onSubmit={handleUploadClip} style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <div className="file-input-wrapper" style={{ flex: 1 }}>
-                <div className="btn-outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%', borderRadius: '10px', borderStyle: 'dashed' }}>
-                  <Upload size={14} /> {selectedFile ? selectedFile.name : 'Choose File...'}
-                </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', flexWrap: 'wrap' }}>
+              <label style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 14px',
+                borderRadius: '10px',
+                border: '1px dashed rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.03)',
+                color: selectedFile ? 'var(--text-main)' : 'var(--text-muted)',
+                fontSize: '0.875rem',
+                cursor: 'pointer',
+                overflow: 'hidden',
+                minWidth: 0,
+              }}>
+                <Upload size={15} style={{ flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedFile ? selectedFile.name : 'Choose File to Upload...'}
+                </span>
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,audio/mp3,audio/wav"
                   onChange={handleFileSelect}
+                  style={{ display: 'none' }}
                 />
-              </div>
+              </label>
               <button
                 type="submit"
                 className="btn-primary"

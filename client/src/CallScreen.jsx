@@ -26,7 +26,8 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin, isSpea
   }, [item.track]);
 
   if (item.kind === Track.Kind.Audio) {
-    return <audio ref={elRef} autoPlay />;
+    // IMPORTANT: muted={item.isLocal} prevents playing your own mic back to yourself (echo fix)
+    return <audio ref={elRef} autoPlay muted={item.isLocal} />;
   }
 
   // If Data Saver is active, bypass heavy CSS filters to save mobile CPU & battery
