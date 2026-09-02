@@ -157,7 +157,7 @@ export default function EffectsPicker({ activeFilter, activeBg, onSelectFilter, 
                 key={f.id}
                 type="button"
                 className={`effect-tile ${selected ? 'active' : ''}`}
-                onClick={() => onSelectFilter(f.id)}
+                onClick={() => onSelectFilter(selected ? 'none' : f.id)}
               >
                 <div className="effect-preview" style={{ filter: f.css }}>
                   <span style={{ fontSize: '1.4rem' }}>{f.emoji}</span>
@@ -180,7 +180,7 @@ export default function EffectsPicker({ activeFilter, activeBg, onSelectFilter, 
                 key={bg.id}
                 type="button"
                 className={`effect-tile ${selected ? 'active' : ''} ${isDisabledOnDevice ? 'effect-tile-disabled' : ''}`}
-                onClick={() => !isDisabledOnDevice && onSelectBg(bg.id)}
+                onClick={() => !isDisabledOnDevice && onSelectBg(selected ? 'none' : bg.id)}
                 title={isDisabledOnDevice ? 'Disabled: your device may not handle deep blur during a live call without frame drops' : bg.name}
                 style={{ opacity: isDisabledOnDevice ? 0.45 : 1, cursor: isDisabledOnDevice ? 'not-allowed' : 'pointer' }}
               >

@@ -45,32 +45,6 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin, isSpea
   let videoStyle = { width: '100%', height: '100%', objectFit: 'cover', transition: 'all 0.3s ease' };
   let containerStyle = { position: 'relative', cursor: 'pointer', overflow: 'hidden' };
 
-  if (bgObj && bgObj.id !== 'none') {
-    if (bgObj.id.startsWith('blur-')) {
-      const blurAmount = bgObj.id === 'blur-deep' ? '25px' : '10px';
-      videoFilterStr = filterCss ? `${filterCss} blur(${blurAmount})` : `blur(${blurAmount})`;
-    } else if (bgObj.imgUrl) {
-      containerStyle = {
-        ...containerStyle,
-        backgroundImage: `url(${bgObj.imgUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        padding: '12px',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-      };
-      videoStyle = {
-        ...videoStyle,
-        borderRadius: '16px',
-        border: '2px solid rgba(255, 255, 255, 0.3)',
-        boxShadow: '0 12px 36px rgba(0, 0, 0, 0.75)',
-        width: '92%',
-        height: '92%',
-      };
-    }
-  }
-
   videoStyle.filter = videoFilterStr;
 
   return (
@@ -312,7 +286,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           } else if (data.type === 'RESPONSE') {
             // Only act if this response is addressed to me (by LiveKit identity)
             const myIdentity = roomRef.current?.localParticipant?.identity;
-            if (data.forUserId && data.forUserId !== myIdentity) break; // not for me
+            if (data.forUserId && data.forUserId !== myIdentity) return; // not for me
             setRequestSentNotice(false);
             if (data.allowed) {
               setIsScreenShareApproved(true);
@@ -426,6 +400,84 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     await roomRef.current.localParticipant.setCameraEnabled(newState);
     setCamOn(newState);
   };
+
+  // ─── Real-Time AI Background Segmentation (LiveKit Track Processors) ───────
+  // Replaces the background BEHIND the person with chosen image or blur effect.
+  // The person is segmented in real time and kept in foreground.
+  const currentBgProcessorRef = useRef(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function applyVirtualBackground() {
+      if (!roomRef.current?.localParticipant) return;
+
+      const pubs = Array.from(roomRef.current.localParticipant.videoTrackPublications.values());
+      const camPub = pubs.find(
+        (p) => p.track && (p.source === Track.Source.Camera || p.track.kind === 'video')
+      );
+      const localTrack = camPub?.track;
+      if (!localTrack || typeof localTrack.setProcessor !== 'function') return;
+
+      try {
+        if (!activeBg || activeBg === 'none' || !camOn) {
+          if (currentBgProcessorRef.current) {
+            await localTrack.stopProcessor();
+            currentBgProcessorRef.current = null;
+          }
+          return;
+        }
+
+        const bgObj = VIRTUAL_BACKGROUNDS.find((b) => b.id === activeBg);
+        if (!bgObj || bgObj.id === 'none') {
+          if (currentBgProcessorRef.current) {
+            await localTrack.stopProcessor();
+            currentBgProcessorRef.current = null;
+          }
+          return;
+        }
+
+        setToastNotice('⏳ Segmenting background...');
+
+        const { BackgroundBlur, VirtualBackground, supportsBackgroundProcessors } = await import('@livekit/track-processors');
+        if (!supportsBackgroundProcessors()) {
+          setToastNotice('⚠️ Virtual background is not supported on this device/browser.');
+          setTimeout(() => setToastNotice(null), 3500);
+          return;
+        }
+
+        if (isCancelled) return;
+
+        let processor = null;
+        if (bgObj.id.startsWith('blur-')) {
+          const radius = bgObj.id === 'blur-deep' ? 25 : 10;
+          processor = BackgroundBlur(radius);
+        } else if (bgObj.imgUrl) {
+          processor = VirtualBackground(bgObj.imgUrl);
+        }
+
+        if (processor && !isCancelled) {
+          if (currentBgProcessorRef.current) {
+            await localTrack.stopProcessor();
+          }
+          await localTrack.setProcessor(processor);
+          currentBgProcessorRef.current = processor;
+          setToastNotice(`✨ Background applied: ${bgObj.name}`);
+          setTimeout(() => setToastNotice(null), 3000);
+        }
+      } catch (err) {
+        console.warn('Virtual background processor error:', err);
+        setToastNotice(`⚠️ Background notice: ${err.message || 'processing error'}`);
+        setTimeout(() => setToastNotice(null), 4000);
+      }
+    }
+
+    applyVirtualBackground();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeBg, camOn]);
 
   // Live in-room nickname switch with instant broadcast and local sync
   const handleUpdateInRoomName = async (e) => {

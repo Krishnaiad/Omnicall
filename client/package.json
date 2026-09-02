@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@livekit/track-processors": "^0.7.2",
+    "@mediapipe/selfie_segmentation": "^0.1.1675465747",
     "dompurify": "^3.2.4",
     "livekit-client": "^2.9.3",
     "lucide-react": "^0.475.0",
