@@ -1,34 +1,40 @@
 :root,
 [data-theme="dark"] {
-  --bg: #14141f;              /* page background */
-  --surface: #1e1e2e;         /* cards, panels */
-  --surface-raised: #262638;  /* hover / elevated rows */
-  --text-primary: #f2f2f5;
-  --text-secondary: #9a9aa6;
-  --text-muted: #6c6c78;
-  --border: #33334a;
-  --border-strong: #45455f;
+  --bg: #080D1A;              /* Main application background (very dark navy) */
+  --surface: #0F172A;         /* Cards and primary surfaces */
+  --surface-raised: #151F32;  /* Secondary dark surface */
+  --surface-elevated: #1E293B;/* Elevated surface (modals, popovers, menus) */
+  --surface-hover: rgba(59, 130, 246, 0.08); /* Subtle cool blue hover */
 
-  --accent: #7f77dd;          /* primary — buttons, links, brand */
-  --accent-hover: #9089e6;
-  --accent-bg: #2a2650;       /* tint for badges/backgrounds */
+  --text-primary: #F8FAFC;    /* Primary text */
+  --text-secondary: #CBD5E1;  /* Secondary text */
+  --text-muted: #64748B;      /* Muted text */
+  --border: #263449;          /* Subtle borders */
+  --border-strong: #334155;   /* Active / focused borders */
 
-  --success: #5dcaa5;         /* reserved: live calls, connected, uploaded */
-  --success-bg: #163d33;
+  --accent: #3B82F6;          /* Primary interactive blue (lighter for dark mode) */
+  --accent-hover: #60A5FA;    /* Hover state */
+  --accent-active: #2563EB;   /* Active / pressed state */
+  --accent-bg: #172554;       /* Primary dark tint */
 
-  --danger: #e97878;          /* reserved: delete, destructive only */
-  --danger-bg: #3d2222;
+  --success: #22C55E;         /* Success (connected, online, completed) */
+  --success-bg: rgba(34, 197, 94, 0.15);
 
-  --warning: #e0b34d;         /* reserved: needs-attention states */
-  --warning-bg: #3b2e15;
+  --danger: #F87171;          /* Error / Danger (destructive only) */
+  --danger-bg: rgba(248, 113, 113, 0.15);
 
-  --card-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.4);
-  --modal-shadow: 0 24px 38px 3px rgba(0, 0, 0, 0.6);
+  --warning: #FBBF24;         /* Warning (pending, attention-required) */
+  --warning-bg: rgba(251, 191, 36, 0.15);
+
+  --info: #60A5FA;            /* Information */
+
+  --card-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.5);
+  --modal-shadow: 0 24px 38px 3px rgba(0, 0, 0, 0.7);
 
   /* Backward-compatible aliases */
   --bg-dark: var(--bg);
   --bg-card: var(--surface);
-  --bg-card-hover: var(--surface-raised);
+  --bg-card-hover: var(--surface-hover);
   --border-glow: var(--border);
   --border-active: var(--border-strong);
   --primary: var(--accent);
@@ -38,35 +44,41 @@
 }
 
 [data-theme="light"] {
-  --bg: #f8fafc;              /* Slate-50: crisp, clean modern canvas */
-  --surface: #ffffff;         /* pure white cards */
-  --surface-raised: #f1f5f9;  /* Slate-100: elevated hover and controls */
-  --text-primary: #0f172a;    /* Slate-900: sharp high-contrast text */
-  --text-secondary: #475569;  /* Slate-600: clean supporting copy */
-  --text-muted: #64748b;      /* Slate-500: readable metadata */
-  --border: #e2e8f0;          /* Slate-200: crisp clean card borders */
-  --border-strong: #cbd5e1;   /* Slate-300: solid interactive borders */
+  --bg: #F8FAFC;              /* Main application background */
+  --surface: #FFFFFF;         /* Cards and primary surfaces */
+  --surface-raised: #F1F5F9;  /* Secondary surface (inputs, panels, headers) */
+  --surface-elevated: #FFFFFF;/* Elevated surface */
+  --surface-hover: #F0F5FF;   /* Very light bluish tone on hover */
 
-  --accent: #4f46e5;          /* vibrant Indigo 600: authoritative & cohesive */
-  --accent-hover: #4338ca;    /* Indigo 700 */
-  --accent-bg: #eef2ff;       /* soft Indigo tint */
+  --text-primary: #0F172A;    /* Primary text */
+  --text-secondary: #475569;  /* Secondary text */
+  --text-muted: #94A3B8;      /* Muted text */
+  --border: #E2E8F0;          /* Subtle borders */
+  --border-strong: #CBD5E1;   /* Active / focused borders */
 
-  --success: #059669;         /* Emerald 600 */
-  --success-bg: #ecfdf5;
+  --accent: #0B5CFF;          /* Main brand blue (Zoom-inspired modern SaaS) */
+  --accent-hover: #0047D6;    /* Primary hover */
+  --accent-active: #0036A8;   /* Primary active/pressed */
+  --accent-bg: #E8F0FF;       /* Primary light tint (subtle blue backgrounds) */
 
-  --danger: #dc2626;          /* Red 600 */
-  --danger-bg: #fef2f2;
+  --success: #16A34A;         /* Success */
+  --success-bg: #DCFCE7;
 
-  --warning: #d97706;         /* Amber 600 */
-  --warning-bg: #fffbeb;
+  --danger: #DC2626;          /* Error / Danger */
+  --danger-bg: #FEE2E2;
 
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.03);
+  --warning: #F59E0B;         /* Warning */
+  --warning-bg: #FEF3C7;
+
+  --info: #2563EB;            /* Information */
+
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(11, 92, 255, 0.03);
   --modal-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
 
   /* Backward-compatible aliases */
   --bg-dark: var(--bg);
   --bg-card: var(--surface);
-  --bg-card-hover: var(--surface-raised);
+  --bg-card-hover: var(--surface-hover);
   --border-glow: var(--border);
   --border-active: var(--border-strong);
   --primary: var(--accent);
@@ -84,7 +96,7 @@
 body {
   font-family: var(--font-family);
   background-color: var(--bg);
-  background-image: radial-gradient(circle at 50% -10%, rgba(99, 102, 241, 0.07) 0%, transparent 60%);
+  background-image: radial-gradient(circle at 50% -10%, rgba(11, 92, 255, 0.04) 0%, transparent 60%);
   background-repeat: no-repeat;
   color: var(--text-primary);
   min-height: 100vh;
@@ -354,9 +366,9 @@ input, select, textarea {
 
 .btn-secondary:hover:not(:disabled),
 .btn-outline:hover:not(:disabled) {
-  background: var(--surface-raised);
+  background: var(--surface-hover);
   border-color: var(--accent);
-  color: var(--text-primary);
+  color: var(--accent);
 }
 
 .btn-secondary:active:not(:disabled),
@@ -373,15 +385,16 @@ input, select, textarea {
   padding: 6px 10px;
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   border-radius: 8px;
-  font-size: 0.875rem;
+  font-weight: 500;
+  font-size: 0.8125rem;
   transition: background-color 150ms ease, color 150ms ease;
 }
 
-.btn-ghost:hover {
-  background: var(--surface-raised);
-  color: var(--text-primary);
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--accent);
 }
 
 /* Badges & Tags */
@@ -416,7 +429,7 @@ input, select, textarea {
 }
 
 .theme-toggle-btn:hover {
-  background: var(--surface-raised);
+  background: var(--surface-hover);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -496,7 +509,7 @@ input, select, textarea {
 }
 
 .user-profile-btn:hover {
-  background: var(--surface-raised);
+  background: var(--surface-hover);
   border-color: var(--accent);
 }
 
@@ -523,7 +536,7 @@ input, select, textarea {
 }
 
 .admin-directory-btn:hover {
-  background: var(--surface-raised);
+  background: var(--surface-hover);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -573,15 +586,16 @@ input, select, textarea {
   gap: 12px;
   padding: 16px 20px;
   background: var(--surface);
-  border: 0.5px solid var(--border);
+  border: 1px solid var(--border);
   border-radius: 12px;
   margin-bottom: 12px;
+  box-shadow: var(--card-shadow);
   transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
 
 .room-item:hover {
-  background: var(--surface-raised);
-  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  border-color: var(--accent);
 }
 
 .room-main {
@@ -648,6 +662,10 @@ input, select, textarea {
   width: 100%;
   max-width: 440px;
   padding: 24px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--modal-shadow);
+  border-radius: 12px;
   animation: modalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
