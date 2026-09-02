@@ -13,7 +13,7 @@ import LiveCaptionsOverlay from './LiveCaptionsOverlay.jsx';
 import { captureRoomSnapshot } from './snapshotUtils.js';
 
 
-function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin, isSpeaking, isDataSaver }) {
+function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin, isSpeaking, isDataSaver, onStopTileStream }) {
   const elRef = useRef(null);
 
   useEffect(() => {
@@ -87,6 +87,39 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin, isSpea
         muted={item.isLocal}
         style={videoStyle}
       />
+
+      {/* "Back to Camera" overlay — shown on local tile when tile stream (media injection) is active */}
+      {item.isLocal && onStopTileStream && (
+        <div style={{
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          zIndex: 10,
+        }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onStopTileStream(); }}
+            style={{
+              background: 'rgba(124, 58, 237, 0.9)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              color: '#fff',
+              borderRadius: '9999px',
+              padding: '4px 10px',
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
+            }}
+            title="Stop tile stream and restore camera"
+          >
+            📷 Back to Camera
+          </button>
+        </div>
+      )}
+
       <div className="tile-overlay" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ fontWeight: 600 }}>{displayLabel}</span>
@@ -482,6 +515,28 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     }
   };
 
+  // Stop tile stream (media injection) and restore camera — callable from tile overlay button
+  const handleStopTileStream = async () => {
+    if (!roomRef.current) return;
+    try {
+      const lp = roomRef.current.localParticipant;
+      // Unpublish all current video tracks (the injected media ones)
+      const pubs = Array.from(lp.videoTrackPublications.values());
+      for (const pub of pubs) {
+        if (pub.track) {
+          await lp.unpublishTrack(pub.track, true);
+          try { pub.track.stop(); } catch (_) {}
+        }
+      }
+      // Re-enable the real camera
+      await lp.setCameraEnabled(true);
+      setCamOn(true);
+    } catch (err) {
+      console.warn('Stop tile stream error:', err.message);
+    }
+    setInjectingClip(false);
+  };
+
 
   const handleScreenShareClick = () => {
     if (isSharingScreen) {
@@ -700,6 +755,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
                   onTogglePin={() => setPinnedTrackSid(item.sid)}
                   isSpeaking={speakingIdentities.has(item.identity)}
                   isDataSaver={dataSaverMode}
+                  onStopTileStream={item.isLocal && injectingClip ? handleStopTileStream : undefined}
                 />
               </div>
             ))}
