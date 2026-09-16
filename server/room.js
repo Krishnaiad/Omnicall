@@ -230,22 +230,42 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Fetch persistent chat messages for a room
+// Fetch persistent chat messages for a room — keyset paginated (100 per page)
+// Client sends ?before=<ISO timestamp>&beforeId=<message id> for the next page.
+// First load: omit both params (returns most recent 100 messages).
 router.get('/:roomId/messages', async (req, res) => {
   const { roomId } = req.params;
   try {
     const memberCheck = await isMember(roomId, req.user.id);
     if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
 
-    const rows = await db.queryAll(
-      `SELECT id, sender_id as "senderId", sender_name as "senderName", message as text, created_at as timestamp
-       FROM chat_messages
-       WHERE room_id = $1
-       ORDER BY created_at ASC`,
-      [roomId]
-    );
+    const before = req.query.before;     // ISO timestamp of oldest visible message
+    const beforeId = req.query.beforeId; // id of oldest visible message (tie-break)
 
-    res.json({ messages: rows });
+    let rows;
+    if (before && beforeId) {
+      // Compound cursor: (created_at, id) uniquely orders rows even with same-millisecond timestamps
+      rows = await db.queryAll(
+        `SELECT id, sender_id as "senderId", sender_name as "senderName", message as text, created_at as timestamp
+         FROM chat_messages
+         WHERE room_id = $1 AND (created_at, id) < ($2::timestamptz, $3)
+         ORDER BY created_at DESC, id DESC
+         LIMIT 100`,
+        [roomId, before, beforeId]
+      );
+    } else {
+      rows = await db.queryAll(
+        `SELECT id, sender_id as "senderId", sender_name as "senderName", message as text, created_at as timestamp
+         FROM chat_messages
+         WHERE room_id = $1
+         ORDER BY created_at DESC, id DESC
+         LIMIT 100`,
+        [roomId]
+      );
+    }
+
+    // Return in ascending order for display; hasMore tells client whether another page exists
+    res.json({ messages: rows.reverse(), hasMore: rows.length === 100 });
   } catch (err) {
     console.error('Fetch chat messages failed:', err);
     res.status(500).json({ error: 'Failed to load chat history' });
@@ -388,13 +408,17 @@ router.delete('/:roomId', async (req, res) => {
       } catch (_) {}
     }
 
-    try { await db.queryRun('DELETE FROM chat_messages WHERE room_id = $1', [roomId]); } catch (_) {}
-    try { await db.queryRun('DELETE FROM room_members WHERE room_id = $1', [roomId]); } catch (_) {}
-    try { await db.queryRun('DELETE FROM hand_raises WHERE room_id = $1', [roomId]); } catch (_) {}
-    try { await db.queryRun('DELETE FROM polls WHERE room_id = $1', [roomId]); } catch (_) {}
-    try { await db.queryRun('DELETE FROM whiteboard_strokes WHERE room_id = $1', [roomId]); } catch (_) {}
-    try { await db.queryRun('DELETE FROM invite_links WHERE room_id = $1', [roomId]); } catch (_) {}
-    await db.queryRun('DELETE FROM rooms WHERE id = $1', [roomId]);
+    // Atomic cascade delete — all-or-nothing
+    await db.transaction(async (tx) => {
+      await tx.queryRun('DELETE FROM chat_messages      WHERE room_id = $1', [roomId]);
+      await tx.queryRun('DELETE FROM poll_votes         WHERE poll_id IN (SELECT id FROM polls WHERE room_id = $1)', [roomId]);
+      await tx.queryRun('DELETE FROM polls              WHERE room_id = $1', [roomId]);
+      await tx.queryRun('DELETE FROM hand_raises        WHERE room_id = $1', [roomId]);
+      await tx.queryRun('DELETE FROM whiteboard_strokes WHERE room_id = $1', [roomId]);
+      await tx.queryRun('DELETE FROM invite_links       WHERE room_id = $1', [roomId]);
+      await tx.queryRun('DELETE FROM room_members       WHERE room_id = $1', [roomId]);
+      await tx.queryRun('DELETE FROM rooms              WHERE id = $1',      [roomId]);
+    });
 
     res.json({ ok: true, message: 'Room deleted successfully' });
   } catch (err) {
@@ -516,26 +540,65 @@ router.get('/:roomId/live-status', async (req, res) => {
     const zombieRows = dbActiveSessions.filter((s) => !livekitIdentities.has(s.participant_identity));
     const phantomParticipants = livekitParticipants.filter((p) => !dbIdentities.has(p.identity));
 
-    // Auto-close zombie sessions found during reconciliation
-    for (const zombie of zombieRows) {
-      await db.queryRun(
-        'UPDATE live_sessions SET left_at = NOW(), disconnect_reason = $1 WHERE room_id = $2 AND participant_identity = $3 AND left_at IS NULL',
-        ['reconciled_stale', roomId, zombie.participant_identity]
-      ).catch(() => {});
-    }
-
+    // GET is read-only — does NOT mutate. Use POST /reconcile to close zombie sessions.
     res.json({
       roomId,
       roomName: room.name,
       dbActiveSessions: dbActiveSessions.length,
       livekitActive: livekitParticipants.length,
-      zombieRowsCleaned: zombieRows.length,
+      zombieSessions: zombieRows.length,
       phantomParticipants: phantomParticipants.length,
       drift: zombieRows.length + phantomParticipants.length,
-      reconciled: true,
     });
   } catch (err) {
-    console.error('Live status reconciliation failed:', err);
+    console.error('Live status check failed:', err);
+    res.status(500).json({ error: 'Live status check failed: ' + err.message });
+  }
+});
+
+// Reconcile zombie sessions — POST only, owner/admin gated, has side effects
+export async function reconcileRoomSessions(roomId) {
+  const { apiKey, apiSecret, httpUrl } = getLiveKitCredentials();
+  if (!apiKey || !apiSecret || !httpUrl) return { reconciled: false };
+
+  let livekitParticipants = [];
+  try {
+    const { RoomServiceClient } = await import('livekit-server-sdk');
+    const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
+    livekitParticipants = await roomService.listParticipants(roomId);
+  } catch (err) {
+    console.warn('[Reconcile] LiveKit listParticipants failed:', err.message);
+    return { reconciled: false, error: err.message };
+  }
+
+  const dbActiveSessions = await db.queryAll(
+    'SELECT participant_identity FROM live_sessions WHERE room_id = $1 AND left_at IS NULL',
+    [roomId]
+  );
+  const livekitIdentities = new Set(livekitParticipants.map((p) => p.identity));
+  const zombies = dbActiveSessions.filter((s) => !livekitIdentities.has(s.participant_identity));
+
+  for (const zombie of zombies) {
+    await db.queryRun(
+      'UPDATE live_sessions SET left_at = NOW(), disconnect_reason = $1 WHERE room_id = $2 AND participant_identity = $3 AND left_at IS NULL',
+      ['reconciled_stale', roomId, zombie.participant_identity]
+    ).catch(() => {});
+  }
+  return { reconciled: true, zombiesClosed: zombies.length };
+}
+
+router.post('/:roomId/reconcile', async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = $1', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.owner_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only the room owner or an admin can trigger reconciliation' });
+    }
+    const result = await reconcileRoomSessions(roomId);
+    res.json({ ok: true, roomId, ...result });
+  } catch (err) {
+    console.error('Reconcile failed:', err);
     res.status(500).json({ error: 'Reconciliation failed: ' + err.message });
   }
 });
@@ -551,23 +614,24 @@ router.post('/:roomId/raise-hand', async (req, res) => {
     const memberCheck = await isMember(roomId, req.user.id);
     if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
 
-    // Determine next monotonic sequence number for queue ordering
-    const maxRow = await db.queryGet(
-      'SELECT COALESCE(MAX(sequence_num), 0) as max_seq FROM hand_raises WHERE room_id = $1',
-      [roomId]
-    );
-    const nextSeq = (maxRow?.max_seq || 0) + 1;
     const raiseId = randomUUID();
 
-    // Upsert hand raise row
-    await db.queryRun(
-      'DELETE FROM hand_raises WHERE room_id = $1 AND user_id = $2',
-      [roomId, req.user.id]
-    );
-    await db.queryRun(
-      'INSERT INTO hand_raises (id, room_id, user_id, user_name, sequence_num) VALUES ($1, $2, $3, $4, $5)',
-      [raiseId, roomId, req.user.id, req.user.name, nextSeq]
-    );
+    // Serialize concurrent hand-raises per room via a Postgres advisory lock.
+    // pg_advisory_xact_lock is held for the duration of the transaction,
+    // so MAX(sequence_num)+1 is safe — no two inserts for this room can race.
+    await db.transaction(async (tx) => {
+      await tx.queryRun('SELECT pg_advisory_xact_lock(hashtext($1))', [roomId]);
+      await tx.queryRun(
+        `INSERT INTO hand_raises (id, room_id, user_id, user_name, sequence_num)
+         VALUES ($1, $2, $3, $4,
+           (SELECT COALESCE(MAX(sequence_num), 0) + 1 FROM hand_raises WHERE room_id = $2)
+         )
+         ON CONFLICT (room_id, user_id) DO UPDATE
+           SET sequence_num = EXCLUDED.sequence_num,
+               raised_at    = CURRENT_TIMESTAMP`,
+        [raiseId, roomId, req.user.id, req.user.name]
+      );
+    });
 
     res.json({
       ok: true,
@@ -576,7 +640,6 @@ router.post('/:roomId/raise-hand', async (req, res) => {
         roomId,
         userId: req.user.id,
         userName: req.user.name,
-        sequenceNum: nextSeq,
         raisedAt: new Date().toISOString(),
       },
     });
@@ -698,10 +761,13 @@ router.post('/:roomId/polls/:pollId/vote', async (req, res) => {
     if (poll.status !== 'active') return res.status(400).json({ error: 'This poll is already closed' });
 
     const voteId = randomUUID();
-    // Delete prior vote if any, then insert new vote
-    await db.queryRun('DELETE FROM poll_votes WHERE poll_id = $1 AND user_id = $2', [pollId, req.user.id]);
+    // Atomic upsert — ON CONFLICT handles both first vote and vote changes safely
     await db.queryRun(
-      'INSERT INTO poll_votes (id, poll_id, user_id, user_name, option_index) VALUES ($1, $2, $3, $4, $5)',
+      `INSERT INTO poll_votes (id, poll_id, user_id, user_name, option_index)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (poll_id, user_id) DO UPDATE
+         SET option_index = EXCLUDED.option_index,
+             voted_at     = CURRENT_TIMESTAMP`,
       [voteId, pollId, req.user.id, req.user.name, optionIndex]
     );
 
@@ -750,34 +816,49 @@ router.get('/:roomId/polls', async (req, res) => {
     if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
 
     const pollRows = await db.queryAll('SELECT * FROM polls WHERE room_id = $1 ORDER BY created_at DESC', [roomId]);
-    const pollsWithTally = await Promise.all(
-      pollRows.map(async (p) => {
-        let options = [];
-        try { options = JSON.parse(p.options_json); } catch {}
 
-        const voteRows = await db.queryAll('SELECT user_id, option_index FROM poll_votes WHERE poll_id = $1', [p.id]);
-        const tally = {};
-        let myVote = null;
-        for (const v of voteRows) {
-          tally[v.option_index] = (tally[v.option_index] || 0) + 1;
-          if (v.user_id === req.user.id) myVote = v.option_index;
-        }
+    // Fetch ALL votes for ALL polls in a single query — eliminates N+1 roundtrips
+    const pollIds = pollRows.map(p => p.id);
+    const allVotes = pollIds.length
+      ? await db.queryAll(
+          'SELECT poll_id, user_id, option_index FROM poll_votes WHERE poll_id = ANY($1)',
+          [pollIds]
+        )
+      : [];
 
-        return {
-          id: p.id,
-          roomId: p.room_id,
-          creatorId: p.creator_id,
-          creatorName: p.creator_name,
-          question: p.question,
-          options,
-          status: p.status,
-          votes: tally,
-          totalVotes: voteRows.length,
-          userVotedOption: myVote,
-          createdAt: p.created_at,
-        };
-      })
-    );
+    // Group votes by poll_id in JS
+    const votesByPoll = {};
+    for (const v of allVotes) {
+      if (!votesByPoll[v.poll_id]) votesByPoll[v.poll_id] = [];
+      votesByPoll[v.poll_id].push(v);
+    }
+
+    const pollsWithTally = pollRows.map((p) => {
+      let options = [];
+      try { options = JSON.parse(p.options_json); } catch {}
+
+      const voteRows = votesByPoll[p.id] || [];
+      const tally = {};
+      let myVote = null;
+      for (const v of voteRows) {
+        tally[v.option_index] = (tally[v.option_index] || 0) + 1;
+        if (v.user_id === req.user.id) myVote = v.option_index;
+      }
+
+      return {
+        id: p.id,
+        roomId: p.room_id,
+        creatorId: p.creator_id,
+        creatorName: p.creator_name,
+        question: p.question,
+        options,
+        status: p.status,
+        votes: tally,
+        totalVotes: voteRows.length,
+        userVotedOption: myVote,
+        createdAt: p.created_at,
+      };
+    });
 
     res.json({ polls: pollsWithTally });
   } catch (err) {
@@ -821,10 +902,30 @@ router.get('/:roomId/whiteboard', async (req, res) => {
     const memberCheck = await isMember(roomId, req.user.id);
     if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
 
-    const rows = await db.queryAll(
-      'SELECT id, user_id as "userId", stroke_data as "strokeData", created_at as "createdAt" FROM whiteboard_strokes WHERE room_id = $1 ORDER BY created_at ASC',
-      [roomId]
-    );
+    const afterId = req.query.afterId; // keyset cursor — id of last received stroke
+    let rows;
+    if (afterId) {
+      // Compound cursor: (created_at, id) matches the ORDER BY clause exactly.
+      // Subquery fetches the anchor row's timestamp; if afterId is gone (edge case),
+      // the subquery returns NULL and the comparison safely falls through to 0 rows.
+      rows = await db.queryAll(
+        `SELECT id, user_id as "userId", stroke_data as "strokeData", created_at as "createdAt"
+         FROM whiteboard_strokes
+         WHERE room_id = $1
+           AND (created_at, id) > (
+             SELECT created_at, id FROM whiteboard_strokes WHERE id = $2
+           )
+         ORDER BY created_at ASC, id ASC
+         LIMIT 2000`,
+        [roomId, afterId]
+      );
+    } else {
+      rows = await db.queryAll(
+        `SELECT id, user_id as "userId", stroke_data as "strokeData", created_at as "createdAt"
+         FROM whiteboard_strokes WHERE room_id = $1 ORDER BY created_at ASC, id ASC LIMIT 2000`,
+        [roomId]
+      );
+    }
 
     const strokes = rows.map((r) => {
       try {

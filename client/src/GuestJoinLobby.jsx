@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Video, UserCheck, AlertCircle, ArrowRight } from 'lucide-react';
 import { api } from './api.js';
+import { useMountedRef } from './hooks/useMountedRef.js';
 
 export default function GuestJoinLobby({ inviteToken, onGuestJoinSuccess, onGoToLogin }) {
   const [preview, setPreview] = useState(null);
@@ -8,19 +9,21 @@ export default function GuestJoinLobby({ inviteToken, onGuestJoinSuccess, onGoTo
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState('');
+  const isMountedRef = useMountedRef();
 
   useEffect(() => {
     const loadPreview = async () => {
       try {
         const data = await api.getJoinPreview(inviteToken);
-        setPreview(data);
+        if (isMountedRef.current) setPreview(data);
       } catch (err) {
-        setError(err.message || 'Invalid or expired invite link.');
+        if (isMountedRef.current) setError(err.message || 'Invalid or expired invite link.');
       } finally {
-        setLoading(false);
+        if (isMountedRef.current) setLoading(false);
       }
     };
     loadPreview();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inviteToken]);
 
   const handleJoin = async (e) => {
@@ -42,10 +45,12 @@ export default function GuestJoinLobby({ inviteToken, onGuestJoinSuccess, onGoTo
         displayName: data.displayName,
         guestUser: data.guestUser,
       });
+      // component unmounts here — do NOT call setJoining or setError
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setJoining(false);
+      if (isMountedRef.current) {
+        setError(err.message);
+        setJoining(false);
+      }
     }
   };
 

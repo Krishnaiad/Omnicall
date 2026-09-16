@@ -132,18 +132,61 @@ router.post('/upload', (req, res) => {
   });
 });
 
+// Shared storage-deletion helper — used by both single-delete and bulk-delete to prevent drift
+async function deleteClipStorage(clip) {
+  if (clip.storage_provider === 'cloudinary' && clip.storage_key) {
+    const isVideo = clip.mime_type?.startsWith('video/') || clip.mime_type?.startsWith('audio/');
+    await cloudinaryHelper.deleteMedia(clip.storage_key, { isVideo });
+  } else if (clip.storage_provider === 'r2' && clip.storage_key) {
+    await r2.deleteObject(clip.storage_key);
+  } else if (clip.file_path) {
+    try {
+      await fs.promises.unlink(clip.file_path); // non-blocking, unlike unlinkSync
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw e; // ignore "already gone", rethrow real errors
+    }
+  }
+}
+
 // Delete all user's uploaded clips (Bulk cleanup)
 router.delete('/all', async (req, res) => {
   try {
-    const clips = await db.queryAll('SELECT id, storage_provider, storage_key, mime_type FROM media_files WHERE user_id = $1', [req.user.id]);
-    for (const clip of clips) {
-      if (clip.storage_provider === 'cloudinary' && clip.storage_key) {
-        const isVideo = clip.mime_type?.startsWith('video/') || clip.mime_type?.startsWith('audio/');
-        await cloudinaryHelper.deleteMedia(clip.storage_key, { isVideo }).catch(() => {});
+    const clips = await db.queryAll('SELECT id, storage_provider, storage_key, mime_type, file_path FROM media_files WHERE user_id = $1', [req.user.id]);
+
+    // Run all storage deletions in parallel; capture failures instead of short-circuiting
+    const results = await Promise.allSettled(clips.map(clip => deleteClipStorage(clip)));
+
+    // Separate successes from failures
+    const failedIds = new Set();
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === 'rejected') {
+        const errMsg = results[i].reason?.message || 'unknown error';
+        console.error(`[Media] Failed to delete storage for clip ${clips[i].id}:`, errMsg);
+        failedIds.add(clips[i].id);
+        // Write to cleanup_failures — clip row is intentionally NOT deleted below
+        // so storage_key/provider are preserved for retry.
+        db.queryRun(
+          `INSERT INTO cleanup_failures (id, resource_type, resource_id, error, created_at)
+           VALUES ($1, 'media_clip', $2, $3, CURRENT_TIMESTAMP)`,
+          [randomUUID(), clips[i].id, errMsg]
+        ).catch(() => {});
       }
     }
-    await db.queryRun('DELETE FROM media_files WHERE user_id = $1', [req.user.id]);
-    res.json({ ok: true, message: 'All uploaded media deleted successfully' });
+
+    // Only remove DB records for clips that were successfully cleaned from storage.
+    // Clips that failed remain in media_files with storage_key/provider intact for retry.
+    const successIds = clips.filter(c => !failedIds.has(c.id)).map(c => c.id);
+    if (successIds.length > 0) {
+      await db.queryRun('DELETE FROM media_files WHERE id = ANY($1)', [successIds]);
+    }
+
+    const failCount = failedIds.size;
+    res.json({
+      ok: true,
+      message: failCount > 0
+        ? `Deleted ${successIds.length} clip(s). ${failCount} storage deletion(s) failed — those clips are kept for retry.`
+        : 'All uploaded media deleted successfully',
+    });
   } catch (err) {
     console.error('Delete all clips failed:', err);
     res.status(500).json({ error: 'Failed to delete media clips' });
@@ -249,24 +292,9 @@ router.delete('/:id', async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const isAudio = clip.mime_type?.startsWith('audio/');
-    const isVideo = clip.mime_type?.startsWith('video/');
-
-    if (clip.storage_provider === 'cloudinary' && clip.storage_key) {
-      await cloudinaryHelper.deleteMedia(clip.storage_key, { isVideo, isAudio }).catch((err) => {
-        console.warn('Failed to delete media from Cloudinary:', err.message);
-      });
-    } else if (clip.storage_provider === 'r2' && clip.storage_key) {
-      await r2.deleteObject(clip.storage_key).catch((err) => {
-        console.warn('Failed to delete object from R2:', err.message);
-      });
-    } else {
-      try {
-        if (fs.existsSync(clip.file_path)) fs.unlinkSync(clip.file_path);
-      } catch (err) {
-        console.warn('Failed to delete physical file:', err);
-      }
-    }
+    await deleteClipStorage(clip).catch((err) => {
+      console.warn('[Media] Failed to delete storage for clip:', err.message);
+    });
 
     await db.queryRun('DELETE FROM media_files WHERE id = $1', [id]);
     res.json({ ok: true });

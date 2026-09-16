@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
 import { Film, Play, StopCircle, X, Monitor, Upload, Cloud, AlertCircle, Sparkles } from 'lucide-react';
 import { LocalVideoTrack } from 'livekit-client';
+import { useMountedRef } from './hooks/useMountedRef.js';
 
 export default function MediaInjector({ token, room, onClose, onActiveStateChange, onSharePresentation }) {
   const [clips, setClips] = useState([]);
@@ -15,15 +16,43 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
+  const isMountedRef = useMountedRef();
+
+  // Ref-track the active injected LiveKit track so cleanup can unpublish it
+  // without calling setState on the unmounted component
+  const activeLkTrackRef = useRef(null);
+  // Capture camera state before injection so we restore it correctly on cleanup
+  const preInjectionCamStateRef = useRef(true);
+
+  // Cleanup on unmount: unpublish injected track and restore original camera state.
+  // Must NOT call setState here — the component is already unmounting.
+  useEffect(() => {
+    return () => {
+      const track = activeLkTrackRef.current;
+      if (track && room?.localParticipant) {
+        room.localParticipant.unpublishTrack(track, true).catch(() => {});
+        try { track.stop(); } catch {}
+        activeLkTrackRef.current = null;
+      }
+      // Restore camera to the state it was in BEFORE injection (may have been off)
+      if (room?.localParticipant) {
+        room.localParticipant.setCameraEnabled(preInjectionCamStateRef.current).catch(() => {});
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // empty deps — this only runs on unmount
 
   const loadClips = async () => {
     try {
       const data = await api.listClips(token);
-      setClips((data.clips || []).filter((c) => c.status === 'ready'));
+      // Guard: component may have unmounted while the request was in flight (e.g. token refresh)
+      if (isMountedRef.current) {
+        setClips((data.clips || []).filter((c) => c.status === 'ready'));
+      }
     } catch (err) {
       console.error('Failed to load server clips:', err);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) setLoading(false);
     }
   };
 
@@ -112,6 +141,9 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
       }
 
       if (streamTrack) {
+        // Capture current camera state BEFORE we disable it, so cleanup can restore it
+        preInjectionCamStateRef.current = room.localParticipant?.isCameraEnabled ?? true;
+
         const lkTrack = new LocalVideoTrack(streamTrack);
         const existingPubs = Array.from(room.localParticipant.videoTrackPublications.values());
         for (const pub of existingPubs) {
@@ -120,6 +152,7 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
           }
         }
         await room.localParticipant.publishTrack(lkTrack);
+        activeLkTrackRef.current = lkTrack; // track ref for cleanup
         setActiveTileMediaId(clip.id);
         if (onActiveStateChange) onActiveStateChange(true);
       }
@@ -142,8 +175,9 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
           try { pub.track.stop(); } catch {}
         }
       }
-      await room.localParticipant.setCameraEnabled(true);
+      await room.localParticipant.setCameraEnabled(preInjectionCamStateRef.current);
     }
+    activeLkTrackRef.current = null;
     setActiveTileMediaId(null);
     if (onActiveStateChange) onActiveStateChange(false);
   };

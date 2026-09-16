@@ -56,6 +56,36 @@ export const db = {
   queryAll: (sql, args = []) => {
     return pool.query(normalizeSql(sql), args).then((res) => res.rows);
   },
+  /**
+   * Runs `callback(tx)` inside an atomic BEGIN/COMMIT block.
+   * If the callback throws, the transaction is rolled back.
+   * The ROLLBACK itself is wrapped in its own try/catch so that a dead
+   * connection on rollback never masks the original error.
+   * The pool client is always released in `finally`.
+   */
+  transaction: async (callback) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await callback({
+        queryGet: (sql, args = []) => client.query(normalizeSql(sql), args).then(r => r.rows[0]),
+        queryRun: (sql, args = []) => client.query(normalizeSql(sql), args),
+        queryAll: (sql, args = []) => client.query(normalizeSql(sql), args).then(r => r.rows),
+      });
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        console.error('[DB] Rollback also failed:', rollbackErr.message);
+        // original error is still thrown below — rollback failure is only logged
+      }
+      throw err; // always rethrow the original cause
+    } finally {
+      client.release();
+    }
+  },
 };
 
 export async function connectWithBackoff(maxAttempts = 5) {
@@ -199,6 +229,15 @@ const TABLE_STATEMENTS = [
     caption TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`,
+  // cleanup_failures: Tracks failed storage deletions so a background job can retry them
+  `CREATE TABLE IF NOT EXISTS cleanup_failures (
+    id TEXT PRIMARY KEY,
+    resource_type TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    error TEXT,
+    retried_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
 ];
 
 // Migration: add column if missing (safe for Postgres)
@@ -232,6 +271,13 @@ async function initTables() {
     for (const idxStmt of INDEX_STATEMENTS) {
       await db.exec(idxStmt).catch(() => {});
     }
+
+    // CONCURRENT index on poll_votes(poll_id) — must run OUTSIDE a transaction block.
+    // CREATE INDEX CONCURRENTLY takes no write lock, so it's safe to run at boot even
+    // on a table with existing rows in production.
+    pool.query('CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_poll_votes_poll ON poll_votes(poll_id)')
+      .catch((err) => console.warn('[DB] Concurrent poll_votes index notice:', err.message));
+
   } catch (err) {
     console.warn('[DB] Table initialization notice:', err.message);
   }

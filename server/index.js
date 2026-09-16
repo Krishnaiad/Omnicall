@@ -97,6 +97,29 @@ app.use('/api/memories', memoriesRouter);
 app.use('/api/admin', adminRouter);
 
 
+// Storage health check with 5s timeout.
+// Promise.race doesn't cancel the loser — so we swallow its late rejection with .catch(() => {})
+// and clear the timeout timer on the happy path to avoid lingering timers.
+async function checkStorage(provider) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Storage health check timed out after 5s')), 5000);
+  });
+  const check =
+    provider === 'cloudinary' ? cloudinaryHealthCheck() :
+    provider === 'r2' ? r2HealthCheck() :
+    Promise.resolve({ ok: true, provider: 'local' });
+
+  // Swallow a late rejection from the loser (keeps it from becoming unhandled)
+  check.catch(() => {});
+
+  try {
+    return await Promise.race([check, timeout]);
+  } finally {
+    clearTimeout(timeoutId); // always clear the timer, even on happy path
+  }
+}
+
 // Production Health Check (DB + Storage)
 app.get('/health', async (_req, res) => {
   let dbOk = false;
@@ -108,10 +131,10 @@ app.get('/health', async (_req, res) => {
   }
 
   let storageStatus = { ok: true, provider: 'local' };
-  if (storageConfig.provider === 'cloudinary') {
-    storageStatus = await cloudinaryHealthCheck();
-  } else if (storageConfig.provider === 'r2') {
-    storageStatus = await r2HealthCheck();
+  try {
+    storageStatus = await checkStorage(storageConfig.provider);
+  } catch (err) {
+    storageStatus = { ok: false, provider: storageConfig.provider, error: err.message };
   }
 
   const isHealthy = dbOk && storageStatus.ok;

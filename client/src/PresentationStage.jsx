@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Monitor, X, Maximize2, Minimize2, RotateCcw, Download, Camera, Eye, FileText, User } from 'lucide-react';
+import { Monitor, X, Maximize2, Minimize2, RotateCcw, Download, Camera, Eye, FileText, User, AlertCircle } from 'lucide-react';
 import { api } from './api.js';
 
 export default function PresentationStage({ media, isPresenter, token, roomId, roomName, onStopPresentation, presenterTrack, dataSaverMode, isPresenterPip, onTogglePip }) {
@@ -9,9 +9,20 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
   const [downloadNotice, setDownloadNotice] = useState('');
   const [manualPreview, setManualPreview] = useState(false);
   const [showPip, setShowPip] = useState(true);
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
   const containerRef = useRef(null);
   const mediaRef = useRef(null);
   const pipRef = useRef(null);
+
+  useEffect(() => {
+    if (media?.isPending && !isPresenter) {
+      setLoadTimedOut(false);
+      const timer = setTimeout(() => {
+        setLoadTimedOut(true);
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [media?.isPending, isPresenter]);
 
   useEffect(() => {
     const el = pipRef.current;
@@ -39,9 +50,29 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
     return (
       <div className="presentation-stage-container" style={{ padding: '24px', textAlign: 'center' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', color: 'var(--text-muted)' }}>
-          <div style={{ width: '32px', height: '32px', border: '3px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-          <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>Presentation Loading</div>
-          <div style={{ fontSize: '0.8rem' }}>{media.presenterName} is preparing a file — it will appear here in a moment.</div>
+          {loadTimedOut ? (
+            <>
+              <AlertCircle size={32} color="#f87171" />
+              <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>Presentation Stalled</div>
+              <div style={{ fontSize: '0.8rem', maxWidth: '360px' }}>
+                The media from {media.presenterName} is taking longer than usual to arrive. The upload may have failed or stalled.
+              </div>
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={() => setLoadTimedOut(false)}
+                style={{ padding: '6px 14px', fontSize: '0.8rem', marginTop: '4px' }}
+              >
+                Retry Waiting
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="loading-spinner-pulse" style={{ width: '32px', height: '32px', border: '3px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>Presentation Loading</div>
+              <div style={{ fontSize: '0.8rem' }}>{media.presenterName} is preparing a file — it will appear here in a moment.</div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -54,9 +85,19 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch((err) => console.warn(err));
+      containerRef.current
+        .requestFullscreen()
+        .then(() => {
+          if (containerRef.current) setIsFullscreen(true);
+        })
+        .catch((err) => console.warn(err));
     } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch((err) => console.warn(err));
+      document
+        .exitFullscreen()
+        .then(() => {
+          if (containerRef.current) setIsFullscreen(false);
+        })
+        .catch((err) => console.warn(err));
     }
   };
 

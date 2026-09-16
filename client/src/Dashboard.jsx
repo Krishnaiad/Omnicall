@@ -582,11 +582,27 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
           </form>
 
           {loadingRooms ? (
-            <p style={{ color: 'var(--text-muted)' }}>Loading rooms...</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="room-skeleton-item">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="skeleton-shimmer" style={{ width: '10px', height: '10px', borderRadius: '50%' }} />
+                    <div className="skeleton-shimmer" style={{ width: '140px', height: '16px' }} />
+                    <div className="skeleton-shimmer" style={{ width: '60px', height: '20px', borderRadius: '999px' }} />
+                  </div>
+                  <div className="skeleton-shimmer" style={{ width: '80px', height: '32px', borderRadius: '8px' }} />
+                </div>
+              ))}
+            </div>
           ) : rooms.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px 0' }}>
-              <Video size={32} color="var(--text-muted)" style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No rooms joined yet. Create one above to get started!</p>
+            <div style={{ textAlign: 'center', padding: '32px 16px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '12px', border: '1px dashed rgba(255, 255, 255, 0.1)' }}>
+              <div style={{ display: 'inline-flex', padding: '14px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '50%', marginBottom: '12px' }}>
+                <Video size={28} color="#818cf8" />
+              </div>
+              <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '4px' }}>No video rooms yet</div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', maxWidth: '320px', margin: '0 auto' }}>
+                Create your first room above to start a secure, encrypted video conference with instant link sharing!
+              </p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>

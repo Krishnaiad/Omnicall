@@ -180,6 +180,13 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   const roomRef = useRef(null);
   const screenTrackRef = useRef(null);
   const screenLkTrackRef = useRef(null);
+  const timerRefs = useRef([]);
+
+  const safeTimeout = useCallback((fn, ms) => {
+    const id = window.setTimeout(fn, ms);
+    timerRefs.current.push(id);
+    return id;
+  }, []);
 
   const isOwner = (roomData.owner_id && String(roomData.owner_id) === String(user.id)) || roomData.role === 'owner';
 
@@ -268,10 +275,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         if (topic === 'meeting-control') {
           if (data.type === 'MEETING_ENDED' || data.type === 'ROOM_TERMINATED_BY_HOST') {
             setToastNotice('🚨 The room creator has ended this meeting.');
-            setTimeout(() => onLeave(), 1500);
+            safeTimeout(() => onLeave(), 1500);
           } else if (data.type === 'SNAPSHOT_TAKEN') {
             setToastNotice(`📸 Room Memory Snapshot captured by ${data.takenBy}!`);
-            setTimeout(() => setToastNotice(null), 4500);
+            safeTimeout(() => setToastNotice(null), 4500);
           } else if (data.type === 'PARTICIPANT_RENAMED') {
             setTracks((prev) =>
               prev.map((t) => (t.identity === data.userId || t.identity.startsWith(data.userId) ? { ...t, name: data.newDisplayName } : t))
@@ -300,10 +307,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             setRequestSentNotice(false);
             if (data.allowed) {
               setIsScreenShareApproved(true);
-              setTimeout(() => startNativeScreenShare(), 0);
+              safeTimeout(() => startNativeScreenShare(), 0);
             } else {
               setToastNotice('❌ The room creator denied your screen share request.');
-              setTimeout(() => setToastNotice(null), 4000);
+              safeTimeout(() => setToastNotice(null), 4000);
             }
           }
         } else if (topic === 'whiteboard-control') {
@@ -318,7 +325,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             setShowWhiteboard(true);
             if (!isMe) {
               setToastNotice(`🎨 ${data.presenterName} started an Interactive Whiteboard presentation.`);
-              setTimeout(() => setToastNotice(null), 3500);
+              safeTimeout(() => setToastNotice(null), 3500);
             }
           } else if (data.type === 'WHITEBOARD_OVERRIDE') {
             const isMe = String(data.presenterId) === String(user.id);
@@ -331,13 +338,13 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             setShowWhiteboard(true);
             if (!isMe) {
               setToastNotice(`👑 Room Creator (${data.presenterName}) took over the Whiteboard presentation.`);
-              setTimeout(() => setToastNotice(null), 3500);
+              safeTimeout(() => setToastNotice(null), 3500);
             }
           } else if (data.type === 'WHITEBOARD_STOP') {
             setWhiteboardSession(null);
             setShowWhiteboard(false);
             setToastNotice('Interactive Whiteboard presentation ended.');
-            setTimeout(() => setToastNotice(null), 2500);
+            safeTimeout(() => setToastNotice(null), 2500);
           }
         }
       } catch (err) {
@@ -416,7 +423,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       } catch (err) {
         console.error('Failed to connect to LiveKit room:', err);
         setToastNotice(`❌ Failed to join call: ${err.message}`);
-        setTimeout(() => onLeave(), 4000);
+        safeTimeout(() => onLeave(), 4000);
       }
     }
 
@@ -424,6 +431,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     connect();
 
     return () => {
+      timerRefs.current.forEach((id) => clearTimeout(id));
+      timerRefs.current = [];
       room.disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -431,14 +440,14 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
 
   const toggleMic = async () => {
-    if (!roomRef.current) return;
+    if (!roomRef.current?.localParticipant) return;
     const newState = !micOn;
     await roomRef.current.localParticipant.setMicrophoneEnabled(newState);
     setMicOn(newState);
   };
 
   const toggleCam = async () => {
-    if (!roomRef.current) return;
+    if (!roomRef.current?.localParticipant) return;
     const newState = !camOn;
     await roomRef.current.localParticipant.setCameraEnabled(newState);
     setCamOn(newState);
@@ -485,7 +494,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         const { BackgroundBlur, VirtualBackground, supportsBackgroundProcessors } = await import('@livekit/track-processors');
         if (!supportsBackgroundProcessors()) {
           setToastNotice('⚠️ Virtual background is not supported on this device/browser.');
-          setTimeout(() => setToastNotice(null), 3500);
+          safeTimeout(() => setToastNotice(null), 3500);
           return;
         }
 
@@ -506,12 +515,12 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           await localTrack.setProcessor(processor);
           currentBgProcessorRef.current = processor;
           setToastNotice(`✨ Background applied: ${bgObj.name}`);
-          setTimeout(() => setToastNotice(null), 3000);
+          safeTimeout(() => setToastNotice(null), 3000);
         }
       } catch (err) {
         console.warn('Virtual background processor error:', err);
         setToastNotice(`⚠️ Background notice: ${err.message || 'processing error'}`);
-        setTimeout(() => setToastNotice(null), 4000);
+        safeTimeout(() => setToastNotice(null), 4000);
       }
     }
 
@@ -547,14 +556,14 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     }
 
     setToastNotice(`✨ Your speaking name updated to: ${updated}`);
-    setTimeout(() => setToastNotice(null), 3000);
+    safeTimeout(() => setToastNotice(null), 3000);
     setShowRenameModal(false);
   };
 
   const handleTakeSnapshot = async () => {
     if (!isOwner) {
       setToastNotice('⚠️ Only the room creator/owner can capture memory snapshots.');
-      setTimeout(() => setToastNotice(null), 3000);
+      safeTimeout(() => setToastNotice(null), 3000);
       return;
     }
 
@@ -563,7 +572,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
     if (dataUrl) {
       setToastNotice('📸 Snapshot captured & saved to your Room Memories!');
-      setTimeout(() => setToastNotice(null), 4000);
+      safeTimeout(() => setToastNotice(null), 4000);
       try {
         await api.saveMemory(token, {
           roomId: roomData.id,
@@ -640,7 +649,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     }
   };
 
-  // Stop tile stream (media injection) and restore camera — callable from tile overlay button
+  // Stop tile stream (media injection) and restore camera — callable from tile overlay button.
+  // Restores camera to the state it was in BEFORE injection (camOn reflects pre-injection state
+  // since MediaInjector never calls toggleCam — it directly unpublishes the track).
   const handleStopTileStream = async () => {
     if (!roomRef.current) return;
     try {
@@ -653,9 +664,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           try { pub.track.stop(); } catch (_) {}
         }
       }
-      // Re-enable the real camera
-      await lp.setCameraEnabled(true);
-      setCamOn(true);
+      // Restore camera to its pre-injection state — camOn is unchanged during injection
+      // because MediaInjector bypasses toggleCam and directly manipulates the LiveKit track.
+      await lp.setCameraEnabled(camOn);
+      // camOn already holds the correct value — no setState needed
     } catch (err) {
       console.warn('Stop tile stream error:', err.message);
     }
@@ -705,7 +717,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           isOwner: true,
         }, 'whiteboard-control');
         setToastNotice('👑 You took over the Interactive Whiteboard as Room Creator.');
-        setTimeout(() => setToastNotice(null), 3500);
+        safeTimeout(() => setToastNotice(null), 3500);
       } else {
         // Open in view-only presentation mode
         setShowWhiteboard(true);
@@ -729,7 +741,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       isOwner: true,
     }, 'whiteboard-control');
     setToastNotice('👑 You took over the Interactive Whiteboard.');
-    setTimeout(() => setToastNotice(null), 3000);
+    safeTimeout(() => setToastNotice(null), 3000);
   };
 
 
@@ -833,12 +845,12 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         }
       } else {
         setToastNotice('⚠️ No active video available for Picture-in-Picture mode.');
-        setTimeout(() => setToastNotice(null), 3000);
+        safeTimeout(() => setToastNotice(null), 3000);
       }
     } catch (err) {
       console.warn('PiP notice:', err.message);
       setToastNotice(`PiP notice: ${err.message}`);
-      setTimeout(() => setToastNotice(null), 3000);
+      safeTimeout(() => setToastNotice(null), 3000);
     }
   };
 
@@ -875,7 +887,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
               const nextState = !dataSaverMode;
               setDataSaverMode(nextState);
               setToastNotice(nextState ? '🌿 Data Saver enabled: Video filters bypassed to save mobile data & CPU.' : '⚡ Full Quality Mode restored.');
-              setTimeout(() => setToastNotice(null), 3000);
+              safeTimeout(() => setToastNotice(null), 3000);
             }}
             title="Toggle Data Saver Mode (drops filter overhead for weak/mobile networks)"
           >
@@ -1066,17 +1078,27 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       </div>
 
       <footer className="call-controls">
-        <button className={`control-btn ${!micOn ? 'danger' : ''}`} onClick={toggleMic} title="Toggle Mic">
+        <button
+          className={`control-btn ${!micOn ? 'danger' : ''}`}
+          onClick={toggleMic}
+          aria-pressed={micOn}
+          title={micOn ? "Mute Microphone" : "Unmute Microphone"}
+        >
           {micOn ? <Mic size={20} /> : <MicOff size={20} />}
         </button>
 
-        <button className={`control-btn ${!camOn ? 'danger' : ''}`} onClick={toggleCam} title="Toggle Camera">
+        <button
+          className={`control-btn ${!camOn ? 'danger' : ''}`}
+          onClick={toggleCam}
+          aria-pressed={camOn}
+          title={camOn ? "Turn off Camera" : "Turn on Camera"}
+        >
           {camOn ? <VideoIcon size={20} /> : <VideoOff size={20} />}
         </button>
 
         {/* ✋ Hand Raising Queue Button */}
         <button
-          className={`control-btn ${showHandRaise ? 'active' : ''}`}
+          className={`control-btn ${showHandRaise ? 'active' : ''} ${handRaiseCount > 0 ? 'hand-raised-pulse' : ''}`}
           onClick={() => setShowHandRaise((prev) => !prev)}
           title="Virtual Hand Raising & Speaker Queue"
           style={{ position: 'relative', background: handRaiseCount > 0 ? 'rgba(251, 191, 36, 0.2)' : undefined, borderColor: handRaiseCount > 0 ? '#fbbf24' : undefined }}
@@ -1084,6 +1106,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
           <Hand size={20} color={handRaiseCount > 0 ? '#fbbf24' : undefined} />
           {handRaiseCount > 0 && (
             <span
+              aria-label={handRaiseCount > 9 ? 'More than 9 hands raised' : `${handRaiseCount} hand${handRaiseCount === 1 ? '' : 's'} raised`}
               style={{
                 position: 'absolute',
                 top: '-4px',
@@ -1100,7 +1123,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
                 justifyContent: 'center',
               }}
             >
-              {handRaiseCount}
+              {handRaiseCount > 9 ? '9+' : handRaiseCount}
             </span>
           )}
         </button>
@@ -1131,7 +1154,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             const next = !captionsEnabled;
             setCaptionsEnabled(next);
             setToastNotice(next ? '🎙️ Live Captions enabled' : 'Live Captions turned off');
-            setTimeout(() => setToastNotice(null), 2500);
+            safeTimeout(() => setToastNotice(null), 2500);
           }}
           title={captionsEnabled ? "Turn off Live Captions" : "Turn on Live Captions"}
           style={captionsEnabled ? { background: '#10b981', color: '#fff' } : {}}
@@ -1149,10 +1172,11 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         </button>
 
         <button
-          className={`control-btn ${isSharingScreen ? 'active' : ''}`}
+          className={`control-btn ${isSharingScreen ? 'danger' : ''}`}
           onClick={handleScreenShareClick}
-          title={isOwner ? "Share Screen / Watch Party" : "Request Screen Share Permission from Room Creator"}
-          style={isSharingScreen ? { background: '#ec4899', color: '#fff' } : {}}
+          aria-pressed={isSharingScreen}
+          title={isSharingScreen ? "Stop sharing screen" : (isOwner ? "Share Screen / Watch Party" : "Request Screen Share Permission from Room Creator")}
+          style={isSharingScreen ? { background: '#ef4444', color: '#fff', borderColor: '#dc2626' } : {}}
         >
           <Monitor size={20} />
         </button>

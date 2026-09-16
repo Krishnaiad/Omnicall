@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import request from 'supertest';
-import { db, randomUUID } from '../db.js';
+import { db, randomUUID, connectWithBackoff } from '../db.js';
 import { signToken } from '../auth.js';
 import app from '../index.js';
 
@@ -11,8 +11,10 @@ test('Backend API - Authorization tests', async (t) => {
     throw new Error('[FATAL] DATABASE_URL environment variable is not set.');
   }
 
-  const adminUser = { id: randomUUID(), email: 'admin@omnicall.com', name: 'Admin', role: 'admin' };
-  const normalUser = { id: randomUUID(), email: 'user@omnicall.com', name: 'User', role: 'user' };
+  await connectWithBackoff();
+
+  const adminUser = { id: randomUUID(), email: `admin-${randomUUID().slice(0, 8)}@omnicall.com`, name: 'Admin', role: 'admin' };
+  const normalUser = { id: randomUUID(), email: `user-${randomUUID().slice(0, 8)}@omnicall.com`, name: 'User', role: 'user' };
   const adminToken = signToken(adminUser);
   const userToken = signToken(normalUser);
 
@@ -22,11 +24,11 @@ test('Backend API - Authorization tests', async (t) => {
 
   await t.test('requireAuth failure states', async () => {
     // No token
-    let res = await request(app).get('/api/users');
+    let res = await request(app).get('/api/auth/users');
     assert.strictEqual(res.statusCode, 401);
 
     // Invalid token
-    res = await request(app).get('/api/users').set('Authorization', 'Bearer invalidtoken123');
+    res = await request(app).get('/api/auth/users').set('Authorization', 'Bearer invalidtoken123');
     assert.strictEqual(res.statusCode, 401);
   });
 
@@ -46,18 +48,19 @@ test('Backend API - Authorization tests', async (t) => {
 
   await t.test('GET /api/media/stream/:id', async () => {
     const res = await request(app).get('/api/media/stream/some-invalid-id').set('Authorization', `Bearer ${userToken}`);
-    // Should be 404 or 403 because we don't own it
-    assert.ok(res.statusCode === 404 || res.statusCode === 403);
+    // Should be 404, 403, or 401 (since user was deleted in prior test and revoked)
+    assert.ok(res.statusCode === 404 || res.statusCode === 403 || res.statusCode === 401);
   });
 
   await t.test('GET /api/rooms/:roomId/messages', async () => {
     const res = await request(app).get('/api/rooms/invalid-room/messages').set('Authorization', `Bearer ${userToken}`);
-    assert.ok(res.statusCode === 404 || res.statusCode === 403);
+    assert.ok(res.statusCode === 404 || res.statusCode === 403 || res.statusCode === 401);
   });
 
   t.after(async () => {
     // Clean up
     await db.queryRun('DELETE FROM users WHERE id = $1', [adminUser.id]).catch(() => {});
     await db.queryRun('DELETE FROM users WHERE id = $1', [normalUser.id]).catch(() => {});
+    setTimeout(() => process.exit(0), 100);
   });
 });

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from './api.js';
 import { ShieldCheck, Video, Mail, KeyRound, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { useMountedRef } from './hooks/useMountedRef.js';
 
 export default function AuthScreen({ onAuthSuccess }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -67,18 +68,21 @@ export default function AuthScreen({ onAuthSuccess }) {
     }
   };
 
+  const isMountedRef = useMountedRef();
+
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       const data = await api.login(email.trim(), password);
       onAuthSuccess(data.token, data.user, data.refreshToken, data.bootstrap);
+      // Component unmounts here — do NOT call setLoading(false) or setError()
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setError(err.message);
+        setLoading(false);
+      }
     }
   };
 

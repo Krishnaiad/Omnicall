@@ -426,7 +426,8 @@ router.put('/profile', requireAuth, async (req, res) => {
     const currentUser = await db.queryGet('SELECT id, username FROM users WHERE id = $1', [req.user.id]);
     
     // Only check collision if user is actually changing to a new username
-    if (!currentUser || currentUser.username.toLowerCase() !== cleanUsername) {
+    // Guard: username may be NULL for legacy accounts that never set one
+    if (!currentUser || (currentUser.username || '').toLowerCase() !== cleanUsername) {
       const existing = await db.queryGet(
         'SELECT id FROM users WHERE LOWER(username) = $1 AND id != $2',
         [cleanUsername, req.user.id]
@@ -512,16 +513,34 @@ router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res) => {
       return res.status(403).json({ error: 'Cannot delete an admin account.' });
     }
 
-    // Clean up all related records
-    await db.queryRun('DELETE FROM room_memories WHERE user_id = $1', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM media_files WHERE user_id = $1', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM room_members WHERE user_id = $1', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM chat_messages WHERE sender_id = $1', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM hand_raises WHERE user_id = $1', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM poll_votes WHERE user_id = $1', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM live_sessions WHERE user_id = $1', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM rooms WHERE owner_id = $1', [userId]).catch(() => {});
-    await db.queryRun('DELETE FROM users WHERE id = $1', [userId]);
+    // Atomic cascade: clean up all user data in one transaction
+    await db.transaction(async (tx) => {
+      // 1. Get all rooms this user owns
+      const ownedRooms = await tx.queryAll('SELECT id FROM rooms WHERE owner_id = $1', [userId]);
+      const roomIds = ownedRooms.map(r => r.id);
+
+      if (roomIds.length) {
+        // 2. Delete all children of owned rooms in 7 batched queries (ANY is safe for empty arrays? No — guard it)
+        await tx.queryRun('DELETE FROM chat_messages      WHERE room_id = ANY($1)', [roomIds]);
+        await tx.queryRun('DELETE FROM poll_votes         WHERE poll_id IN (SELECT id FROM polls WHERE room_id = ANY($1))', [roomIds]);
+        await tx.queryRun('DELETE FROM polls              WHERE room_id = ANY($1)', [roomIds]);
+        await tx.queryRun('DELETE FROM hand_raises        WHERE room_id = ANY($1)', [roomIds]);
+        await tx.queryRun('DELETE FROM whiteboard_strokes WHERE room_id = ANY($1)', [roomIds]);
+        await tx.queryRun('DELETE FROM invite_links       WHERE room_id = ANY($1)', [roomIds]);
+        await tx.queryRun('DELETE FROM room_members       WHERE room_id = ANY($1)', [roomIds]);
+        await tx.queryRun('DELETE FROM rooms              WHERE owner_id = $1', [userId]);
+      }
+
+      // 3. Delete the user's own cross-room data
+      await tx.queryRun('DELETE FROM room_memories WHERE user_id = $1',            [userId]);
+      await tx.queryRun('DELETE FROM media_files   WHERE user_id = $1',            [userId]);
+      await tx.queryRun('DELETE FROM room_members  WHERE user_id = $1',            [userId]);
+      await tx.queryRun('DELETE FROM poll_votes    WHERE user_id = $1',            [userId]);
+      await tx.queryRun('DELETE FROM hand_raises   WHERE user_id = $1',            [userId]);
+      await tx.queryRun('DELETE FROM live_sessions WHERE participant_identity = $1', [userId]);
+      await tx.queryRun('DELETE FROM chat_messages WHERE sender_id = $1',          [userId]);
+      await tx.queryRun('DELETE FROM users         WHERE id = $1',                 [userId]);
+    });
 
     // Ban the user for 7 days (length of refresh token)
     await redis.sadd('revoked_users', userId);

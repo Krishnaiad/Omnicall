@@ -11,6 +11,8 @@ export default function PollsPanel({ token, room, roomId, user, isHost, onClose 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [votingPollId, setVotingPollId] = useState(null);
+  const [voteError, setVoteError] = useState('');
 
   // 1. Fetch polls on open (Late-Joiner State Recovery)
   useEffect(() => {
@@ -113,6 +115,8 @@ export default function PollsPanel({ token, room, roomId, user, isHost, onClose 
   };
 
   const handleVote = async (pollId, optionIndex) => {
+    setVotingPollId(pollId);
+    setVoteError('');
     try {
       // 1. Submit vote to server (authoritative tallying)
       const res = await api.votePoll(token, roomId, pollId, optionIndex);
@@ -141,6 +145,11 @@ export default function PollsPanel({ token, room, roomId, user, isHost, onClose 
       }
     } catch (err) {
       console.warn('Vote failed:', err.message);
+      setVoteError(`Vote failed: ${err.message || 'Please try again.'}`);
+      // Auto-dismiss error banner after 5s
+      setTimeout(() => setVoteError(''), 5000);
+    } finally {
+      setVotingPollId(null);
     }
   };
 
@@ -172,6 +181,12 @@ export default function PollsPanel({ token, room, roomId, user, isHost, onClose 
       </div>
 
       <div style={{ padding: '12px', overflowY: 'auto', flex: 1 }}>
+        {voteError && (
+          <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', borderRadius: '8px', fontSize: '0.8rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <AlertCircle size={14} /> {voteError}
+          </div>
+        )}
+
         {isHost && !showCreate && (
           <button
             className="btn-primary"
@@ -260,7 +275,7 @@ export default function PollsPanel({ token, room, roomId, user, isHost, onClose 
                     return (
                       <button
                         key={optIdx}
-                        disabled={isClosed}
+                        disabled={isClosed || votingPollId === poll.id}
                         onClick={() => handleVote(poll.id, optIdx)}
                         style={{
                           position: 'relative',
@@ -269,7 +284,8 @@ export default function PollsPanel({ token, room, roomId, user, isHost, onClose 
                           borderRadius: '8px',
                           background: isSelected ? 'rgba(99, 102, 241, 0.25)' : 'rgba(255, 255, 255, 0.04)',
                           border: isSelected ? '1px solid #818cf8' : '1px solid rgba(255, 255, 255, 0.08)',
-                          cursor: isClosed ? 'default' : 'pointer',
+                          cursor: isClosed || votingPollId === poll.id ? 'default' : 'pointer',
+                          opacity: votingPollId === poll.id ? 0.7 : 1,
                           overflow: 'hidden',
                           transition: 'all 0.15s ease',
                         }}

@@ -49,23 +49,21 @@ export async function handleLiveKitWebhook(req, res) {
 
   try {
     if (eventName === 'participant_joined' && roomInfo && participant) {
-      // Try update first, then insert — compatible with Postgres
-      const updated = await db.queryRun(
-        `UPDATE live_sessions SET left_at = NULL, disconnect_reason = NULL, joined_at = CURRENT_TIMESTAMP, participant_name = $1
-         WHERE room_id = $2 AND participant_identity = $3`,
-        [participant.name || participant.identity, roomInfo.name, participant.identity]
+      // Single atomic upsert — no race between concurrent webhooks for same participant.
+      // CASE WHEN preserves the original joined_at on reconnect flapping (only resets when
+      // the participant had actually left, i.e. left_at IS NOT NULL).
+      await db.queryRun(
+        `INSERT INTO live_sessions (id, room_id, room_name, participant_identity, participant_name, joined_at, left_at, disconnect_reason)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, NULL, NULL)
+         ON CONFLICT (room_id, participant_identity) DO UPDATE
+           SET participant_name    = EXCLUDED.participant_name,
+               joined_at           = CASE WHEN live_sessions.left_at IS NOT NULL
+                                       THEN CURRENT_TIMESTAMP
+                                       ELSE live_sessions.joined_at END,
+               left_at             = NULL,
+               disconnect_reason   = NULL`,
+        [randomUUID(), roomInfo.name, roomInfo.name, participant.identity, participant.name || participant.identity]
       );
-
-      // If no row was updated, insert a fresh row
-      const affectedRows = updated?.rowCount ?? updated?.changes ?? 0;
-      if (affectedRows === 0) {
-        await db.queryRun(
-          `INSERT INTO live_sessions (id, room_id, room_name, participant_identity, participant_name)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [randomUUID(), roomInfo.name, roomInfo.name, participant.identity, participant.name || participant.identity]
-        ).catch(() => {}); // Ignore duplicate key on concurrent webhooks
-      }
-
       console.log(`[Webhook] ✅ participant_joined  → room: ${roomInfo.name} | user: ${participant.identity}`);
 
     } else if (eventName === 'participant_left' && roomInfo && participant) {

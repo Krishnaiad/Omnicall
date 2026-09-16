@@ -22,12 +22,36 @@ const EMOJI_CATEGORIES = [
   },
 ];
 
+function getRelativeTime(timestamp) {
+  if (!timestamp) return '';
+  const now = Date.now();
+  const date = new Date(timestamp);
+  const diffSec = Math.floor((now - date.getTime()) / 1000);
+
+  if (isNaN(diffSec) || diffSec < 5) return 'just now';
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 export default function ChatPanel({ token, room, user, roomId, onClose }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [showEmojis, setShowEmojis] = useState(false);
   const [activeCategory, setActiveCategory] = useState(0);
+  const [, setTick] = useState(0);
   const messagesEndRef = useRef(null);
+
+  // Single shared 30s tick to keep all relative timestamps fresh without per-message timers
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick((t) => t + 1);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -154,17 +178,27 @@ export default function ChatPanel({ token, room, user, roomId, onClose }) {
         ) : (
           messages.map((msg) => (
             <div key={msg.id} className="chat-msg" style={{ opacity: msg._pending ? 0.6 : 1 }}>
-              <div className="chat-msg-sender" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                {msg.senderName}
-                {msg._pending && (
-                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>saving…</span>
-                )}
-                {msg._failed && (
+              <div className="chat-msg-sender" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontWeight: 600 }}>{msg.senderName}</span>
+                  {msg._pending && (
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>saving…</span>
+                  )}
+                  {msg._failed && (
+                    <span
+                      style={{ fontSize: '0.65rem', color: '#f87171', fontWeight: 600 }}
+                      title="Message could not be saved to history. Others in the call can still see it."
+                    >
+                      ⚠ not saved
+                    </span>
+                  )}
+                </div>
+                {msg.timestamp && (
                   <span
-                    style={{ fontSize: '0.65rem', color: '#f87171', fontWeight: 600 }}
-                    title="Message could not be saved to history. Others in the call can still see it."
+                    title={new Date(msg.timestamp).toLocaleString()}
+                    style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontWeight: 400, cursor: 'default' }}
                   >
-                    ⚠ not saved
+                    {getRelativeTime(msg.timestamp)}
                   </span>
                 )}
               </div>

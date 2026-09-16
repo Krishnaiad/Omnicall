@@ -1356,3 +1356,81 @@ input, select, textarea {
   border-radius: 4px;
 }
 
+/* Shimmer Skeleton Loading */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.09) 37%,
+    rgba(255, 255, 255, 0.04) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+  border-radius: 8px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+.room-skeleton-item {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+/* Hand Raised Pulse */
+.hand-raised-pulse {
+  animation: handPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes handPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(251, 191, 36, 0);
+  }
+}
+
+/* Accessibility: prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  /* Decorative animations disabled */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* State-indicating spinners: retain a gentle opacity pulse instead of frozen mid-spin */
+  .loading-spinner-pulse,
+  .spinner,
+  [data-spinner="true"] {
+    animation: spinnerReducedMotionPulse 1.5s ease-in-out infinite !important;
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  @keyframes spinnerReducedMotionPulse {
+    0%, 100% {
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+
