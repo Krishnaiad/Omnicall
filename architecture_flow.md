@@ -11,25 +11,25 @@ At its core, OmniCall separates **Signaling & Media Routing** (handled by LiveKi
 ```mermaid
 graph TD
     subgraph "Frontend"
-        UI[React Client / Vite]
-        Call[CallScreen & Injectors]
-        Dash[Dashboard & Auth]
+        UI["React Client / Vite"]
+        Call["CallScreen & Injectors"]
+        Dash["Dashboard & Auth"]
         UI --- Call
         UI --- Dash
     end
 
     subgraph "Backend Infrastructure"
-        Node[Express.js Server]
-        Cron[Reconciliation Cron]
-        Hooks[Webhook Receiver]
+        Node["Express.js Server"]
+        Cron["Reconciliation Cron"]
+        Hooks["Webhook Receiver"]
         Node --- Cron
         Node --- Hooks
     end
 
     subgraph "External Services"
-        LiveKit[LiveKit SFU]
-        DB[(PostgreSQL Database)]
-        Storage[(Cloudinary / R2)]
+        LiveKit["LiveKit SFU"]
+        DB[("PostgreSQL Database")]
+        Storage[("Cloudinary / R2")]
     end
 
     %% Connections
@@ -53,37 +53,37 @@ This diagram illustrates the step-by-step journey a user takes through the appli
 ```mermaid
 graph TD
     %% Entry Points
-    Start([User Visits App]) --> HasAccount{Has Account?}
-    HasAccount -- Yes --> Login[Login via AuthScreen]
-    HasAccount -- No --> Register[Register via AuthScreen]
-    HasAccount -- "Has Invite Link" --> GuestLobby[Guest Join Lobby]
+    Start(["User Visits App"]) --> HasAccount{"Has Account?"}
+    HasAccount -- Yes --> Login["Login via AuthScreen"]
+    HasAccount -- No --> Register["Register via AuthScreen"]
+    HasAccount -- "Has Invite Link" --> GuestLobby["Guest Join Lobby"]
 
-    Login -- "JWT via /api/auth/login" --> Dash[Dashboard]
+    Login -- "JWT via /api/auth/login" --> Dash["Dashboard"]
     Register -- "OTP Verification" --> Dash
 
     %% Dashboard Actions
     subgraph "Pre-Call / Dashboard"
-        Dash --> Upload[Upload Media Clips]
-        Dash --> Create[Create & Manage Rooms]
-        Dash --> Memories[View Whiteboard Memories]
+        Dash --> Upload["Upload Media Clips"]
+        Dash --> Create["Create & Manage Rooms"]
+        Dash --> Memories["View Whiteboard Memories"]
     end
 
     %% Transition to Call
-    Create --> JoinCall[Click 'Join Call']
+    Create --> JoinCall["Click 'Join Call'"]
     GuestLobby --> JoinCall
-    JoinCall -- "Fetch LiveKit Token (/api/rooms/:id/token)" --> CallScreen((In-Call Interface))
+    JoinCall -- "Fetch LiveKit Token (/api/rooms/:id/token)" --> CallScreen(("In-Call Interface"))
 
     %% In-Call Actions
     subgraph "Active Meeting (CallScreen)"
-        CallScreen --> Media[Media Injector: Broadcast Video Clip]
-        CallScreen --> WB[Whiteboard: Draw & Save Snapshot]
-        CallScreen --> Polls[Polls: Vote & View Results]
-        CallScreen --> Hands[Hand Raise: Join Speaker Queue]
-        CallScreen --> Screen[Screen Share & PiP]
+        CallScreen --> Media["Media Injector: Broadcast Video Clip"]
+        CallScreen --> WB["Whiteboard: Draw & Save Snapshot"]
+        CallScreen --> Polls["Polls: Vote & View Results"]
+        CallScreen --> Hands["Hand Raise: Join Speaker Queue"]
+        CallScreen --> Screen["Screen Share & PiP"]
     end
 
     %% End Flow
-    Media -.-> Leave([Leave Meeting])
+    Media -.-> Leave(["Leave Meeting"])
     WB -.-> Leave
     Polls -.-> Leave
     Hands -.-> Leave
@@ -178,18 +178,18 @@ The Media Injector allows users to bypass their webcam and stream pre-uploaded v
 ```mermaid
 graph TD
     subgraph Dashboard Phase
-        Client1[React UI] -- "1. Upload File (FormData)" --> Server[Node.js (media.js)]
-        Server -- "2. Upload Stream" --> Storage[(Cloudinary / R2)]
-        Server -- "3. Save Metadata" --> DB[(PostgreSQL)]
+        Client1["React UI"] -- "1. Upload File (FormData)" --> Server["Node.js (media.js)"]
+        Server -- "2. Upload Stream" --> Storage[("Cloudinary / R2")]
+        Server -- "3. Save Metadata" --> DB[("PostgreSQL")]
     end
 
     subgraph In-Call Phase
-        Client2[CallScreen / MediaInjector.jsx]
+        Client2["CallScreen / MediaInjector.jsx"]
         Client2 -- "4. Fetch Clips" --> DB
         Client2 -- "5. Download Media Blob" --> Storage
         Client2 -- "6. Create LocalVideoTrack" --> Client2
-        Client2 -- "7. Replace Camera Track" --> LiveKit[LiveKit SFU]
-        LiveKit -- "8. Broadcast as Webcam" --> Peers[Other Participants]
+        Client2 -- "7. Replace Camera Track" --> LiveKit["LiveKit SFU"]
+        LiveKit -- "8. Broadcast as Webcam" --> Peers["Other Participants"]
     end
     
     %% Styling
