@@ -67,6 +67,12 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
   const [leavingRoomTarget, setLeavingRoomTarget] = useState(null);
   const [leaving, setLeaving] = useState(false);
 
+  // Additional Delete Modals State
+  const [deletingUserTarget, setDeletingUserTarget] = useState(null);
+  const [deletingClipTarget, setDeletingClipTarget] = useState(null);
+  const [deletingMemoryTarget, setDeletingMemoryTarget] = useState(null);
+  const [deletingAllClipsTarget, setDeletingAllClipsTarget] = useState(false);
+
   const eventSourceRef = useRef(null);
   const isAdmin = user && user.role === 'admin';
 
@@ -133,18 +139,19 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
     }
   };
 
-  const handleAdminDeleteUser = async (targetUser) => {
-    if (!window.confirm(`Are you sure you want to delete user @${targetUser.username || targetUser.name}? All their rooms and files will be removed.`)) {
-      return;
-    }
+  const confirmAdminDeleteUser = async () => {
+    if (!deletingUserTarget) return;
+    setDeleting(true);
     setError('');
-    setSuccess('');
     try {
-      await api.deleteUser(token, targetUser.id);
-      setAdminUsersList((prev) => prev.filter((u) => u.id !== targetUser.id));
-      setSuccess(`User @${targetUser.username || targetUser.name} deleted successfully.`);
+      await api.deleteUser(token, deletingUserTarget.id);
+      setAdminUsersList((prev) => prev.filter((u) => u.id !== deletingUserTarget.id));
+      setSuccess(`User @${deletingUserTarget.username || deletingUserTarget.name} deleted successfully.`);
+      setDeletingUserTarget(null);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -312,35 +319,52 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
     }
   };
 
-  const handleDeleteClip = async (id) => {
+  const confirmDeleteClip = async () => {
+    if (!deletingClipTarget) return;
+    setDeleting(true);
+    setError('');
     try {
-      await api.deleteClip(token, id);
+      await api.deleteClip(token, deletingClipTarget.id);
       fetchClips();
       setSuccess('Media deleted.');
+      setDeletingClipTarget(null);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
-  const handleDeleteAllClips = async () => {
-    if (!window.confirm('Delete all uploaded media files?')) return;
+  const confirmDeleteAllClips = async () => {
+    if (!deletingAllClipsTarget) return;
+    setDeleting(true);
+    setError('');
     try {
       await api.deleteAllClips(token);
       setClips([]);
       setSuccess('All media clips deleted.');
+      setDeletingAllClipsTarget(false);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
-  const handleDeleteMemory = async (id) => {
+  const confirmDeleteMemory = async () => {
+    if (!deletingMemoryTarget) return;
+    setDeleting(true);
+    setError('');
     try {
-      await api.deleteMemory(token, id);
-      setMemories((prev) => prev.filter((m) => m.id !== id));
-      if (selectedMemoryView?.id === id) setSelectedMemoryView(null);
+      await api.deleteMemory(token, deletingMemoryTarget.id);
+      setMemories((prev) => prev.filter((m) => m.id !== deletingMemoryTarget.id));
+      if (selectedMemoryView?.id === deletingMemoryTarget.id) setSelectedMemoryView(null);
       setSuccess('Memory snapshot deleted.');
+      setDeletingMemoryTarget(null);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -514,7 +538,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         <div className="stat-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Media clips</span>
-            <div className="stat-icon-box">
+            <div className="stat-icon-box" style={{ color: '#8B5CF6', background: 'rgba(139,92,246,0.1)' }}>
               <Film size={16} />
             </div>
           </div>
@@ -525,7 +549,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         <div className="stat-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Room memories</span>
-            <div className="stat-icon-box">
+            <div className="stat-icon-box" style={{ color: '#F59E0B', background: 'rgba(245,158,11,0.1)' }}>
               <Camera size={16} />
             </div>
           </div>
@@ -620,9 +644,9 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                         </>
                       ) : (
                         <>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)', display: 'inline-block' }} title="No one in room" />
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--text-muted)', display: 'inline-block' }} title="No one in room" />
                           <span className="room-name-text" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{room.name}</span>
-                          <span className="badge" style={{ color: 'var(--danger)', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', fontSize: '0.7rem' }}>
+                          <span className="badge" style={{ color: 'var(--text-secondary)', background: 'var(--surface-raised)', border: '1px solid var(--border)', fontSize: '0.7rem' }}>
                             No one in room
                           </span>
                         </>
@@ -646,6 +670,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                         <button
                           className="btn-delete"
                           onClick={() => setDeletingRoomTarget(room)}
+                          aria-label="Delete room"
                           title="Delete room"
                         >
                           <Trash2 size={16} />
@@ -697,7 +722,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               <button
                 type="button"
                 className="btn-ghost"
-                onClick={handleDeleteAllClips}
+                onClick={() => setDeletingAllClipsTarget(true)}
                 style={{ color: 'var(--danger)', fontSize: '0.75rem', padding: '4px 8px' }}
               >
                 <Trash2 size={12} /> Clear all
@@ -814,6 +839,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                       <button
                         className="btn-ghost"
                         onClick={() => setSelectedMediaPreview(clip)}
+                        aria-label="Preview media"
                         title="Preview media"
                         style={{ padding: '6px' }}
                       >
@@ -823,9 +849,10 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                         className="btn-delete"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteClip(clip.id);
+                          setDeletingClipTarget(clip);
                         }}
                         style={{ padding: '6px' }}
+                        aria-label="Delete clip"
                         title="Delete clip"
                       >
                         <Trash2 size={14} />
@@ -888,14 +915,19 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                       rel="noreferrer"
                       className="btn-ghost"
                       style={{ padding: '6px' }}
+                      aria-label="Download image"
                       title="Download image"
                     >
                       <Download size={14} />
                     </a>
                     <button
-                      onClick={() => handleDeleteMemory(mem.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingMemoryTarget(mem);
+                      }}
                       className="btn-delete"
                       style={{ padding: '6px' }}
+                      aria-label="Delete memory"
                       title="Delete memory"
                     >
                       <Trash2 size={14} />
@@ -1038,7 +1070,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                 <button type="button" className="btn-outline" onClick={() => setShowProfileModal(false)} style={{ flex: 1, borderRadius: '8px' }}>
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary" disabled={savingProfile} style={{ flex: 1, borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1, #4f46e5)' }}>
+                <button type="submit" className="btn-primary" disabled={savingProfile} style={{ flex: 1, borderRadius: '8px' }}>
                   {savingProfile ? 'Saving...' : 'Save Profile'}
                 </button>
               </div>
@@ -1052,7 +1084,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         <div className="modal-backdrop" style={{ zIndex: 1000 }}>
           <div className="glass-card modal-box" style={{ width: '600px', maxWidth: '94vw', padding: '24px', borderRadius: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.125rem', color: '#f472b6' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.125rem', color: 'var(--text-primary)' }}>
                 <Shield size={20} /> Registered Accounts Directory ({adminUsersList.length})
               </div>
               <button onClick={() => setShowAdminDirectory(false)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
@@ -1108,16 +1140,13 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                             <td style={{ padding: '8px', textAlign: 'right' }}>
                               {u.role !== 'admin' && (
                                 <button
-                                  className="btn-outline"
-                                  onClick={() => handleAdminDeleteUser(u)}
+                                  className="btn-delete"
+                                  onClick={() => setDeletingUserTarget(u)}
                                   title={`Delete user @${u.username}`}
                                   style={{
                                     padding: '4px 8px',
                                     borderRadius: '6px',
                                     fontSize: '0.75rem',
-                                    color: '#ef4444',
-                                    borderColor: 'rgba(239, 68, 68, 0.4)',
-                                    background: 'rgba(239, 68, 68, 0.1)',
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: '4px',
@@ -1224,12 +1253,12 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                   <Download size={14} /> Download File
                 </a>
                 <button
-                  className="btn-outline"
+                  className="btn-delete"
                   onClick={() => {
-                    handleDeleteClip(selectedMediaPreview.id);
+                    setDeletingClipTarget(selectedMediaPreview);
                     setSelectedMediaPreview(null);
                   }}
-                  style={{ padding: '6px 12px', fontSize: '0.8rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.4)' }}
+                  style={{ padding: '6px 12px', fontSize: '0.8rem' }}
                 >
                   <Trash2 size={14} /> Delete
                 </button>
@@ -1265,6 +1294,90 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                 style={{ flex: 1, background: 'linear-gradient(135deg, #ef4444, #dc2626)', borderRadius: '8px' }}
               >
                 {deleting ? 'Deleting...' : 'Delete Room'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingUserTarget && (
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+          <div className="glass-card modal-box" style={{ width: '380px', padding: '24px', borderRadius: '16px', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700, fontSize: '1.125rem', color: '#ef4444', marginBottom: '12px' }}>
+              <AlertTriangle size={22} /> Confirm User Deletion
+            </div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+              Are you sure you want to permanently delete user <strong>@{deletingUserTarget.username || deletingUserTarget.name}</strong>? All their rooms and files will be removed.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button className="btn-outline" onClick={() => setDeletingUserTarget(null)} style={{ flex: 1, borderRadius: '8px' }}>
+                Cancel
+              </button>
+              <button className="btn-primary" onClick={confirmAdminDeleteUser} disabled={deleting} style={{ flex: 1, background: 'linear-gradient(135deg, #ef4444, #dc2626)', borderRadius: '8px' }}>
+                {deleting ? 'Deleting...' : 'Delete User'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingClipTarget && (
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+          <div className="glass-card modal-box" style={{ width: '380px', padding: '24px', borderRadius: '16px', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700, fontSize: '1.125rem', color: '#ef4444', marginBottom: '12px' }}>
+              <AlertTriangle size={22} /> Confirm Delete Media
+            </div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+              Are you sure you want to permanently delete this media clip? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button className="btn-outline" onClick={() => setDeletingClipTarget(null)} style={{ flex: 1, borderRadius: '8px' }}>
+                Cancel
+              </button>
+              <button className="btn-primary" onClick={confirmDeleteClip} disabled={deleting} style={{ flex: 1, background: 'linear-gradient(135deg, #ef4444, #dc2626)', borderRadius: '8px' }}>
+                {deleting ? 'Deleting...' : 'Delete Media'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingAllClipsTarget && (
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+          <div className="glass-card modal-box" style={{ width: '380px', padding: '24px', borderRadius: '16px', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700, fontSize: '1.125rem', color: '#ef4444', marginBottom: '12px' }}>
+              <AlertTriangle size={22} /> Clear Media Library
+            </div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+              Are you sure you want to permanently delete <strong>all uploaded media files</strong>? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button className="btn-outline" onClick={() => setDeletingAllClipsTarget(false)} style={{ flex: 1, borderRadius: '8px' }}>
+                Cancel
+              </button>
+              <button className="btn-primary" onClick={confirmDeleteAllClips} disabled={deleting} style={{ flex: 1, background: 'linear-gradient(135deg, #ef4444, #dc2626)', borderRadius: '8px' }}>
+                {deleting ? 'Deleting...' : 'Clear All'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingMemoryTarget && (
+        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+          <div className="glass-card modal-box" style={{ width: '380px', padding: '24px', borderRadius: '16px', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700, fontSize: '1.125rem', color: '#ef4444', marginBottom: '12px' }}>
+              <AlertTriangle size={22} /> Confirm Delete Memory
+            </div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+              Are you sure you want to permanently delete this room snapshot? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button className="btn-outline" onClick={() => setDeletingMemoryTarget(null)} style={{ flex: 1, borderRadius: '8px' }}>
+                Cancel
+              </button>
+              <button className="btn-primary" onClick={confirmDeleteMemory} disabled={deleting} style={{ flex: 1, background: 'linear-gradient(135deg, #ef4444, #dc2626)', borderRadius: '8px' }}>
+                {deleting ? 'Deleting...' : 'Delete Memory'}
               </button>
             </div>
           </div>
