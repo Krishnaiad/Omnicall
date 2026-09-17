@@ -31,6 +31,17 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || '*';
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        connectSrc: ["'self'", 'https://omnicall-api.onrender.com', 'ws:', 'wss:'],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+        mediaSrc: ["'self'", 'blob:', 'https:'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      },
+    },
   })
 );
 
@@ -87,6 +98,11 @@ app.use('/api/auth/send-otp', authLimiter);
 app.use('/api/auth/verify-otp-register', authLimiter);
 app.use('/api/', apiLimiter);
 
+
+import path from 'path';
+
+// Serve local uploads
+app.use('/uploads', express.static(path.resolve(process.env.UPLOADS_DIR || './uploads')));
 
 // API Routers
 app.use('/api/auth', authRouter);

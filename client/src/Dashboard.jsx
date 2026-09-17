@@ -188,8 +188,8 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         };
 
         es.onerror = () => {
-          // Gracefully close on error to avoid mobile browser exceptions
-          try { es?.close(); } catch (_) {}
+          // Native EventSource will automatically attempt to reconnect with exponential backoff.
+          // Do not call es.close() here.
         };
       }
     } catch (sseErr) {
@@ -261,16 +261,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
     setSavingProfile(true);
     try {
-      const res = await fetch(`${api.BASE_URL}/api/auth/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ name: cleanName, username: cleanUsername }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update profile');
+      const data = await api.updateProfile(token, cleanName, cleanUsername);
 
       setProfileModalSuccess(`✅ Changes saved successfully! Updated to @${data.user.username}`);
       setSuccess(`✅ Changes saved successfully! Updated to @${data.user.username}`);

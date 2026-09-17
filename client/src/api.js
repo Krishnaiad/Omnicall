@@ -44,6 +44,7 @@ async function request(endpoint, options = {}, isRetry = false) {
             onRefreshed(refreshData.token);
           } else {
             isRefreshing = false;
+            onRefreshed(null); // Reject pending subscribers
             localStorage.removeItem('omnicall_token');
             localStorage.removeItem('omnicall_refresh_token');
             localStorage.removeItem('omnicall_user');
@@ -52,12 +53,14 @@ async function request(endpoint, options = {}, isRetry = false) {
           }
         } catch (err) {
           isRefreshing = false;
+          onRefreshed(null); // Reject pending subscribers
           throw err;
         }
       }
 
       // Retry original request with newly refreshed access token
       const newToken = await new Promise((resolve) => subscribeTokenRefresh(resolve));
+      if (!newToken) throw new Error('Session expired.');
       const retryHeaders = { ...(options.headers || {}), Authorization: `Bearer ${newToken}` };
       return request(endpoint, { ...options, headers: retryHeaders }, true);
     }
@@ -113,6 +116,16 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
+    }),
+
+  updateProfile: (token, name, username) =>
+    request('/api/auth/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ name, username }),
     }),
 
   listUsers: (token) =>
@@ -177,14 +190,31 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` },
     }),
 
-  sendRoomMessage: (token, roomId, id, text) =>
+  sendRoomMessage: (token, roomId, id, text, attachmentUrl) =>
     request(`/api/rooms/${roomId}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ id, text }),
+      body: JSON.stringify({ id, text, attachmentUrl }),
+    }),
+
+  addReaction: (token, roomId, messageId, reactions) =>
+    request(`/api/rooms/${roomId}/messages/${messageId}/reactions`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ reactions }),
+    }),
+
+  uploadChatAttachment: (token, roomId, formData) =>
+    request(`/api/rooms/${roomId}/messages/attachments`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
     }),
 
   listClips: (token) =>
@@ -228,11 +258,11 @@ export const api = {
     }),
 
   // ─── Room State Service: Polls & Q&A ──────────────────────────────────────
-  createPoll: (token, roomId, question, options) =>
+  createPoll: (token, roomId, question, options, anonymous = false) =>
     request(`/api/rooms/${roomId}/polls`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ question, options }),
+      body: JSON.stringify({ question, options, anonymous }),
     }),
 
   votePoll: (token, roomId, pollId, optionIndex) =>

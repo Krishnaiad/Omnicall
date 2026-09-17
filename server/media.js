@@ -291,10 +291,12 @@ router.delete('/:id', async (req, res) => {
     if (clip.user_id !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
-
-    await deleteClipStorage(clip).catch((err) => {
+    try {
+      await deleteClipStorage(clip);
+    } catch (err) {
       console.warn('[Media] Failed to delete storage for clip:', err.message);
-    });
+      return res.status(500).json({ error: 'Failed to delete media from storage. Please try again.' });
+    }
 
     await db.queryRun('DELETE FROM media_files WHERE id = $1', [id]);
     res.json({ ok: true });

@@ -66,9 +66,11 @@ export default function LiveCaptionsOverlay({ room, user, isEnabled, onClose }) 
       }
     };
 
+    const isMounted = { current: true };
+
     recognition.onend = () => {
-      // Auto-restart if still enabled
-      if (isEnabled) {
+      // Auto-restart if still enabled and mounted
+      if (isEnabled && isMounted.current) {
         try { recognition.start(); } catch {}
       }
     };
@@ -81,6 +83,7 @@ export default function LiveCaptionsOverlay({ room, user, isEnabled, onClose }) 
     }
 
     return () => {
+      isMounted.current = false;
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch {}
       }

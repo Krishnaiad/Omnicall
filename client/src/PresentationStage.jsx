@@ -125,7 +125,7 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(objectUrl);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000); // Wait for download to start
 
       if (token) {
         await api.saveMemory(token, {
@@ -160,7 +160,7 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
     position: 'fixed',
     bottom: '80px',
     right: '20px',
-    width: '320px',
+    width: 'min(320px, 90vw)',
     height: 'auto',
     zIndex: 50,
     borderRadius: '12px',

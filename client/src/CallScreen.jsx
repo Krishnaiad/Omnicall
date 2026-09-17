@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Room, RoomEvent, Track, LocalVideoTrack, DisconnectReason } from 'livekit-client';
 import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check, UserPlus, Pin, PinOff, Tv, Zap, ZapOff, Volume2, BarChart3, Hand, Edit2, MessageSquareQuote, StopCircle } from 'lucide-react';
-import MediaInjector from './MediaInjector.jsx';
-import ChatPanel from './ChatPanel.jsx';
-import EffectsPicker, { VIDEO_FILTERS, VIRTUAL_BACKGROUNDS } from './EffectsPicker.jsx';
-import PresentationStage from './PresentationStage.jsx';
-import InCallInviteModal from './InCallInviteModal.jsx';
-import WhiteboardModal from './WhiteboardModal.jsx';
-import PollsPanel from './PollsPanel.jsx';
-import HandRaiseQueue from './HandRaiseQueue.jsx';
-import LiveCaptionsOverlay from './LiveCaptionsOverlay.jsx';
 import { captureRoomSnapshot } from './snapshotUtils.js';
+import React, { Suspense } from 'react';
+import EffectsPicker, { VIDEO_FILTERS, VIRTUAL_BACKGROUNDS } from './EffectsPicker.jsx';
+import InCallInviteModal from './InCallInviteModal.jsx';
+import LiveCaptionsOverlay from './LiveCaptionsOverlay.jsx';
+
+const MediaInjector = React.lazy(() => import('./MediaInjector.jsx'));
+const ChatPanel = React.lazy(() => import('./ChatPanel.jsx'));
+const PresentationStage = React.lazy(() => import('./PresentationStage.jsx'));
+const WhiteboardModal = React.lazy(() => import('./WhiteboardModal.jsx'));
+const PollsPanel = React.lazy(() => import('./PollsPanel.jsx'));
+const HandRaiseQueue = React.lazy(() => import('./HandRaiseQueue.jsx'));
 
 
-function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin, isSpeaking, isDataSaver, onStopTileStream }) {
+const TrackTile = React.memo(function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin, isSpeaking, isDataSaver, onStopTileStream }) {
   const elRef = useRef(null);
 
   useEffect(() => {
@@ -114,7 +116,7 @@ function TrackTile({ item, activeFilter, activeBg, isPinned, onTogglePin, isSpea
       </div>
     </div>
   );
-}
+});
 
 export default function CallScreen({ token, user, roomData, roomToken, initialDisplayName, onLeave }) {
   const [tracks, setTracks] = useState([]);
@@ -268,6 +270,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       setTracks((prev) => prev.filter((t) => t.identity !== participant.identity));
     });
 
+    let isMounted = true;
+
     // Zoom-style server & duplicate device disconnect handling
     room.on(RoomEvent.Disconnected, (reason) => {
       console.warn('[LiveKit] Room disconnected. Reason:', reason);
@@ -282,42 +286,38 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             try { pub.track?.stop(); } catch (_) {}
           });
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('Track cleanup error:', err);
+      }
 
-      const isDuplicate =
-        reason === DisconnectReason?.DUPLICATE_IDENTITY ||
-        reason === 'DUPLICATE_IDENTITY' ||
-        reason === 2;
-
-      const isRemoved =
-        reason === DisconnectReason?.PARTICIPANT_REMOVED ||
-        reason === 'PARTICIPANT_REMOVED' ||
-        reason === 4;
-
+      const isDuplicate = reason === DisconnectReason?.DUPLICATE_IDENTITY || reason === 2;
+      const isRemoved = reason === DisconnectReason?.PARTICIPANT_REMOVED || reason === 4;
       const isRoomClosed =
         reason === DisconnectReason?.ROOM_DELETED ||
         reason === DisconnectReason?.ROOM_CLOSED ||
         reason === 5 ||
         reason === 10;
 
-      if (isDuplicate) {
-        setDisconnectModal({
-          title: 'Connected on Another Device',
-          message: 'You were disconnected from this meeting because your account joined this meeting from another device or window.',
-          btnText: 'Return to Dashboard',
-        });
-      } else if (isRemoved) {
-        setDisconnectModal({
-          title: 'Removed from Meeting',
-          message: 'You have been removed from this meeting by the host.',
-          btnText: 'Return to Dashboard',
-        });
-      } else if (isRoomClosed) {
-        setDisconnectModal({
-          title: 'Meeting Ended',
-          message: 'The meeting was closed or ended by the room host.',
-          btnText: 'Return to Dashboard',
-        });
+      if (isMounted) {
+        if (isDuplicate) {
+          setDisconnectModal({
+            title: 'Connected on Another Device',
+            message: 'You were disconnected from this meeting because your account joined this meeting from another device or window.',
+            btnText: 'Return to Dashboard',
+          });
+        } else if (isRemoved) {
+          setDisconnectModal({
+            title: 'Removed from Meeting',
+            message: 'You have been removed from this meeting by the host.',
+            btnText: 'Return to Dashboard',
+          });
+        } else if (isRoomClosed) {
+          setDisconnectModal({
+            title: 'Meeting Ended',
+            message: 'The meeting was closed or ended by the room host.',
+            btnText: 'Return to Dashboard',
+          });
+        }
       }
     });
 
@@ -486,6 +486,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     connect();
 
     return () => {
+      isMounted = false;
       timerRefs.current.forEach((id) => clearTimeout(id));
       timerRefs.current = [];
       room.disconnect();
@@ -1000,7 +1001,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
                   activeFilter={activeFilter}
                   activeBg={activeBg}
                   isPinned={true}
-                  onTogglePin={() => setPinnedTrackSid(null)}
+                  onTogglePin={handleTogglePin}
                   isSpeaking={speakingIdentities.has(pinnedTrack.identity)}
                   isDataSaver={dataSaverMode}
                 />
@@ -1031,7 +1032,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
                   activeFilter={activeFilter}
                   activeBg={activeBg}
                   isPinned={false}
-                  onTogglePin={() => setPinnedTrackSid(item.sid)}
+                  onTogglePin={handleTogglePin}
                   isSpeaking={speakingIdentities.has(item.identity)}
                   isDataSaver={dataSaverMode}
                   onStopTileStream={item.isLocal && injectingClip ? handleStopTileStream : undefined}
@@ -1056,23 +1057,27 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         )}
 
         {showInjector && (
-          <MediaInjector
-            token={token}
-            room={roomRef.current}
-            onClose={() => setShowInjector(false)}
-            onActiveStateChange={(active) => setInjectingClip(active)}
-            onSharePresentation={handleSharePresentation}
-          />
+          <Suspense fallback={null}>
+            <MediaInjector
+              token={token}
+              room={roomRef.current}
+              onClose={() => setShowInjector(false)}
+              onActiveStateChange={(active) => setInjectingClip(active)}
+              onSharePresentation={handleSharePresentation}
+            />
+          </Suspense>
         )}
 
         {showChat && (
-          <ChatPanel
-            token={token}
-            room={roomRef.current}
-            user={user}
-            roomId={roomData.id}
-            onClose={() => setShowChat(false)}
-          />
+          <Suspense fallback={null}>
+            <ChatPanel
+              token={token}
+              room={roomRef.current}
+              user={user}
+              roomId={roomData.id}
+              onClose={() => setShowChat(false)}
+            />
+          </Suspense>
         )}
 
         {showInCallInvite && (
@@ -1086,41 +1091,47 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
         {/* ─── Room State Service Modals & Overlays ─── */}
         {showWhiteboard && (
-          <WhiteboardModal
-            token={token}
-            room={roomRef.current}
-            roomId={roomData.id}
-            isHost={isOwner}
-            isPresenter={whiteboardSession ? whiteboardSession.isPresenter : true}
-            presenterName={whiteboardSession?.presenterName}
-            onTakeOver={handleTakeOverWhiteboard}
-            videoTracks={videoTracks}
-            onClose={handleToggleWhiteboard}
-          />
+          <Suspense fallback={null}>
+            <WhiteboardModal
+              token={token}
+              room={roomRef.current}
+              roomId={roomData.id}
+              isHost={isOwner}
+              isPresenter={whiteboardSession ? whiteboardSession.isPresenter : true}
+              presenterName={whiteboardSession?.presenterName}
+              onTakeOver={handleTakeOverWhiteboard}
+              videoTracks={videoTracks}
+              onClose={handleToggleWhiteboard}
+            />
+          </Suspense>
         )}
 
 
         {showPolls && (
-          <PollsPanel
-            token={token}
-            room={roomRef.current}
-            roomId={roomData.id}
-            user={user}
-            isHost={isOwner}
-            onClose={() => setShowPolls(false)}
-          />
+          <Suspense fallback={null}>
+            <PollsPanel
+              token={token}
+              room={roomRef.current}
+              roomId={roomData.id}
+              user={user}
+              isHost={isOwner}
+              onClose={() => setShowPolls(false)}
+            />
+          </Suspense>
         )}
 
         {showHandRaise && (
-          <HandRaiseQueue
-            token={token}
-            room={roomRef.current}
-            roomId={roomData.id}
-            user={user}
-            isHost={isOwner}
-            onHandRaiseCountChange={(count) => setHandRaiseCount(count)}
-            onClose={() => setShowHandRaise(false)}
-          />
+          <Suspense fallback={null}>
+            <HandRaiseQueue
+              token={token}
+              room={roomRef.current}
+              roomId={roomData.id}
+              user={user}
+              isHost={isOwner}
+              onHandRaiseCountChange={(count) => setHandRaiseCount(count)}
+              onClose={() => setShowHandRaise(false)}
+            />
+          </Suspense>
         )}
 
         {/* Live Subtitles & Captions Overlay */}

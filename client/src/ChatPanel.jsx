@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { RoomEvent } from 'livekit-client';
-import { Send, X, Smile } from 'lucide-react';
+import { Send, X, Smile, Paperclip } from 'lucide-react';
 import { api } from './api.js';
 
 const EMOJI_CATEGORIES = [
@@ -40,6 +40,8 @@ function getRelativeTime(timestamp) {
 export default function ChatPanel({ token, room, user, roomId, onClose }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [attachment, setAttachment] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [showEmojis, setShowEmojis] = useState(false);
   const [activeCategory, setActiveCategory] = useState(0);
   const [, setTick] = useState(0);
@@ -100,15 +102,18 @@ export default function ChatPanel({ token, room, user, roomId, onClose }) {
 
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!input.trim() || !room) return;
+    if ((!input.trim() && !attachment) || !room) return;
 
     const msgText = input.trim();
+    const currentAttachment = attachment;
+    
     const tempId = `local-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const optimisticMsg = {
       id: tempId,
       senderId: user.id,
       senderName: user.name,
       text: msgText,
+      attachment_url: currentAttachment ? URL.createObjectURL(currentAttachment) : null,
       timestamp: new Date().toISOString(),
       _pending: true, // Visual indicator while persisting
     };
@@ -116,18 +121,28 @@ export default function ChatPanel({ token, room, user, roomId, onClose }) {
     // 1. Optimistic local render immediately so UI feels instant
     setMessages((prev) => [...prev, optimisticMsg]);
     setInput('');
+    setAttachment(null);
+    setUploading(true);
 
     // 2. Persist to PostgreSQL FIRST — ensures late joiners see this message in history
     let confirmedId = tempId;
     let persistOk = false;
+    let uploadedUrl = null;
     try {
-      const saved = await api.sendRoomMessage(token, roomId, tempId, msgText);
+      if (currentAttachment) {
+        const formData = new FormData();
+        formData.append('attachment', currentAttachment);
+        const uploadRes = await api.uploadChatAttachment(token, roomId, formData);
+        uploadedUrl = uploadRes.url;
+      }
+      
+      const saved = await api.sendRoomMessage(token, roomId, tempId, msgText, uploadedUrl);
       confirmedId = saved?.id || tempId;
       persistOk = true;
 
       // Update local message: remove pending flag, use server-confirmed ID
       setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, id: confirmedId, _pending: false } : m))
+        prev.map((m) => (m.id === tempId ? { ...m, id: confirmedId, _pending: false, attachment_url: uploadedUrl || m.attachment_url } : m))
       );
     } catch (dbErr) {
       console.error('[Chat] Failed to persist message to PostgreSQL:', dbErr);
@@ -135,6 +150,8 @@ export default function ChatPanel({ token, room, user, roomId, onClose }) {
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? { ...m, _pending: false, _failed: true } : m))
       );
+    } finally {
+      setUploading(false);
     }
 
     // 3. Broadcast via LiveKit DataChannel AFTER persist — other call participants receive it
@@ -147,6 +164,7 @@ export default function ChatPanel({ token, room, user, roomId, onClose }) {
         senderId: user.id,
         senderName: user.name,
         text: msgText,
+        attachment_url: uploadedUrl,
         timestamp: new Date().toISOString(),
         _persisted: persistOk,
       };
@@ -170,10 +188,10 @@ export default function ChatPanel({ token, room, user, roomId, onClose }) {
         </button>
       </div>
 
-      <div className="chat-messages">
+      <div className="chat-messages" aria-live="polite" aria-atomic="false">
         {messages.length === 0 ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', textAlign: 'center', marginTop: '20px' }}>
-            No messages yet. Send a message or emoji to start chatting!
+            No messages yet. Send a message, file, or emoji to start chatting!
           </p>
         ) : (
           messages.map((msg) => (
@@ -202,7 +220,18 @@ export default function ChatPanel({ token, room, user, roomId, onClose }) {
                   </span>
                 )}
               </div>
-              <div>{msg.text}</div>
+              <div style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{msg.text}</div>
+              {msg.attachment_url && (
+                <div style={{ marginTop: '8px' }}>
+                  {msg.attachment_url.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) ? (
+                    <img src={msg.attachment_url} alt="attachment" style={{ maxWidth: '100%', borderRadius: '6px' }} />
+                  ) : (
+                    <a href={msg.attachment_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline', fontSize: '0.8rem' }}>
+                      📎 View Attachment
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           ))
         )}
@@ -291,17 +320,30 @@ export default function ChatPanel({ token, room, user, roomId, onClose }) {
         </div>
       )}
 
-      <form className="chat-input-row" onSubmit={handleSend}>
-        <input
-          className="form-control"
-          placeholder="Type a message or react..."
-          style={{ fontSize: '0.8125rem' }}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-        />
-        <button type="submit" className="btn-primary" style={{ width: 'auto', padding: '8px 14px' }}>
-          <Send size={16} />
-        </button>
+      <form className="chat-input-row" onSubmit={handleSend} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        {attachment && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', fontSize: '0.75rem' }}>
+            <Paperclip size={14} color="#818cf8" />
+            <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{attachment.name}</span>
+            <button type="button" onClick={() => setAttachment(null)} style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', padding: '2px' }}><X size={14} /></button>
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ cursor: 'pointer', color: 'var(--text-muted)' }}>
+            <Paperclip size={18} />
+            <input type="file" onChange={(e) => setAttachment(e.target.files?.[0])} style={{ display: 'none' }} accept="image/*, .pdf, .txt, .csv" />
+          </label>
+          <input
+            className="form-control"
+            placeholder="Type a message or react..."
+            style={{ fontSize: '0.8125rem', flex: 1 }}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+          />
+          <button type="submit" disabled={uploading} className="btn-primary" style={{ width: 'auto', padding: '8px 14px' }}>
+            <Send size={16} />
+          </button>
+        </div>
       </form>
     </div>
   );

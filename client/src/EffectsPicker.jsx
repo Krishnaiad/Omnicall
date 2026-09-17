@@ -104,7 +104,10 @@ const TIER_LABELS = {
 
 export default function EffectsPicker({ activeFilter, activeBg, onSelectFilter, onSelectBg, onClose }) {
   const [tab, setTab] = useState('filters');
-  const tierInfo = TIER_LABELS[DEVICE_TIER];
+  const [manualTier, setManualTier] = useState(null);
+  
+  const currentTier = manualTier || DEVICE_TIER;
+  const tierInfo = TIER_LABELS[currentTier];
 
   return (
     <div className="glass-card injector-popover" style={{ width: '400px', maxWidth: '92vw' }}>
@@ -121,14 +124,24 @@ export default function EffectsPicker({ activeFilter, activeBg, onSelectFilter, 
       <div
         title={tierInfo.tip}
         style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
+          display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap',
           fontSize: '0.7rem', fontWeight: 500, color: tierInfo.color,
           background: `${tierInfo.color}18`, borderRadius: '6px',
           padding: '4px 8px', marginBottom: '12px', cursor: 'help',
         }}
       >
         {tierInfo.label}
-        {DEVICE_TIER === 'low' && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>— Deep Blur disabled to maintain call quality</span>}
+        {currentTier === 'low' && (
+          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+            — Deep Blur disabled. 
+            <button 
+              onClick={() => setManualTier('medium')} 
+              style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline', padding: 0, marginLeft: '4px' }}
+            >
+              Force enable
+            </button>
+          </span>
+        )}
       </div>
 
       <div className="tab-group" style={{ marginBottom: '16px' }}>
@@ -173,7 +186,7 @@ export default function EffectsPicker({ activeFilter, activeBg, onSelectFilter, 
         <div className="effects-grid">
           {VIRTUAL_BACKGROUNDS.map((bg) => {
             const selected = activeBg === bg.id;
-            const isDisabledOnDevice = DEVICE_TIER === 'low' && HIGH_PERF_BG_IDS.has(bg.id);
+            const isDisabledOnDevice = currentTier === 'low' && HIGH_PERF_BG_IDS.has(bg.id);
 
             return (
               <button

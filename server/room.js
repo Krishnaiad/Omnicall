@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { db, randomUUID } from './db.js';
 import { requireAuth, requireAdmin } from './auth.js';
@@ -246,7 +249,7 @@ router.get('/:roomId/messages', async (req, res) => {
     if (before && beforeId) {
       // Compound cursor: (created_at, id) uniquely orders rows even with same-millisecond timestamps
       rows = await db.queryAll(
-        `SELECT id, sender_id as "senderId", sender_name as "senderName", message as text, created_at as timestamp
+        `SELECT id, sender_id as "senderId", sender_name as "senderName", message as text, created_at as timestamp, reactions_json as "reactions", attachment_url as "attachmentUrl"
          FROM chat_messages
          WHERE room_id = $1 AND (created_at, id) < ($2::timestamptz, $3)
          ORDER BY created_at DESC, id DESC
@@ -255,7 +258,7 @@ router.get('/:roomId/messages', async (req, res) => {
       );
     } else {
       rows = await db.queryAll(
-        `SELECT id, sender_id as "senderId", sender_name as "senderName", message as text, created_at as timestamp
+        `SELECT id, sender_id as "senderId", sender_name as "senderName", message as text, created_at as timestamp, reactions_json as "reactions", attachment_url as "attachmentUrl"
          FROM chat_messages
          WHERE room_id = $1
          ORDER BY created_at DESC, id DESC
@@ -272,13 +275,44 @@ router.get('/:roomId/messages', async (req, res) => {
   }
 });
 
+const uploadsDir = path.resolve(process.env.UPLOADS_DIR || './uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadsDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, `chat-${Date.now()}-${randomUUID()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB max for chat
+});
+
+// Local-only upload for chat attachments (Improvement 1)
+router.post('/:roomId/messages/attachments', upload.single('file'), async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+    if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+    // Since we are storing locally, we return the public URL path
+    const publicUrl = `/uploads/${path.basename(req.file.path)}`;
+    res.json({ ok: true, url: publicUrl, name: req.file.originalname });
+  } catch (err) {
+    console.error('Chat attachment upload failed:', err);
+    res.status(500).json({ error: 'Failed to upload attachment' });
+  }
+});
+
 // Save persistent chat message sent during a call
 router.post('/:roomId/messages', async (req, res) => {
   const { roomId } = req.params;
-  const { id, text } = req.body || {};
+  const { id, text, attachmentUrl } = req.body || {};
 
-  if (!text || !text.trim()) {
-    return res.status(400).json({ error: 'Message text is required' });
+  if ((!text || !text.trim()) && !attachmentUrl) {
+    return res.status(400).json({ error: 'Message text or attachment is required' });
   }
 
   try {
@@ -286,11 +320,11 @@ router.post('/:roomId/messages', async (req, res) => {
     if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
 
     const msgId = id || randomUUID();
-    const sanitized = text.trim().slice(0, 1000);
+    const sanitized = text ? text.trim().slice(0, 1000) : '';
 
     await db.queryRun(
-      'INSERT INTO chat_messages (id, room_id, sender_id, sender_name, message) VALUES ($1, $2, $3, $4, $5)',
-      [msgId, roomId, req.user.id, req.user.name, sanitized]
+      'INSERT INTO chat_messages (id, room_id, sender_id, sender_name, message, attachment_url) VALUES ($1, $2, $3, $4, $5, $6)',
+      [msgId, roomId, req.user.id, req.user.name, sanitized, attachmentUrl || null]
     );
 
     res.status(201).json({
@@ -299,11 +333,36 @@ router.post('/:roomId/messages', async (req, res) => {
       senderId: req.user.id,
       senderName: req.user.name,
       text: sanitized,
+      attachmentUrl: attachmentUrl || null,
+      reactions: "{}",
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
     console.error('Save chat message failed:', err);
     res.status(500).json({ error: 'Failed to save chat message' });
+  }
+});
+
+router.patch('/:roomId/messages/:messageId/reactions', async (req, res) => {
+  const { roomId, messageId } = req.params;
+  const { reactions } = req.body || {};
+
+  try {
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+
+    // Ensure it's a valid JSON string for sqlite/postgres
+    const reactionsJson = JSON.stringify(reactions || {});
+
+    await db.queryRun(
+      'UPDATE chat_messages SET reactions_json = $1 WHERE id = $2 AND room_id = $3',
+      [reactionsJson, messageId, roomId]
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Save reaction failed:', err);
+    res.status(500).json({ error: 'Failed to save reaction' });
   }
 });
 
@@ -698,7 +757,7 @@ router.get('/:roomId/hand-raises', async (req, res) => {
 // Create Poll (Host-Gated on Server)
 router.post('/:roomId/polls', async (req, res) => {
   const { roomId } = req.params;
-  const { question, options } = req.body || {};
+  const { question, options, anonymous } = req.body || {};
 
   if (!question || !question.trim()) {
     return res.status(400).json({ error: 'Poll question is required' });
@@ -716,10 +775,11 @@ router.post('/:roomId/polls', async (req, res) => {
 
     const pollId = randomUUID();
     const cleanOptions = options.map((opt) => String(opt).trim()).filter(Boolean);
+    const isAnonymous = !!anonymous;
 
     await db.queryRun(
-      'INSERT INTO polls (id, room_id, creator_id, creator_name, question, options_json, status) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [pollId, roomId, req.user.id, req.user.name, question.trim(), JSON.stringify(cleanOptions), 'active']
+      'INSERT INTO polls (id, room_id, creator_id, creator_name, question, options_json, status, anonymous) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [pollId, roomId, req.user.id, req.user.name, question.trim(), JSON.stringify(cleanOptions), 'active', isAnonymous]
     );
 
     res.status(201).json({
@@ -732,6 +792,7 @@ router.post('/:roomId/polls', async (req, res) => {
         question: question.trim(),
         options: cleanOptions,
         status: 'active',
+        anonymous: isAnonymous,
         votes: {},
         totalVotes: 0,
         createdAt: new Date().toISOString(),
@@ -853,6 +914,7 @@ router.get('/:roomId/polls', async (req, res) => {
         question: p.question,
         options,
         status: p.status,
+        anonymous: !!p.anonymous,
         votes: tally,
         totalVotes: voteRows.length,
         userVotedOption: myVote,
@@ -916,13 +978,13 @@ router.get('/:roomId/whiteboard', async (req, res) => {
              SELECT created_at, id FROM whiteboard_strokes WHERE id = $2
            )
          ORDER BY created_at ASC, id ASC
-         LIMIT 2000`,
+         LIMIT 10000`,
         [roomId, afterId]
       );
     } else {
       rows = await db.queryAll(
         `SELECT id, user_id as "userId", stroke_data as "strokeData", created_at as "createdAt"
-         FROM whiteboard_strokes WHERE room_id = $1 ORDER BY created_at ASC, id ASC LIMIT 2000`,
+         FROM whiteboard_strokes WHERE room_id = $1 ORDER BY created_at ASC, id ASC LIMIT 10000`,
         [roomId]
       );
     }

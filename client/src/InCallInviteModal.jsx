@@ -62,7 +62,14 @@ export default function InCallInviteModal({ token, roomId, roomName, onClose }) 
   };
 
   return (
-    <div className="modal-backdrop">
+    <div 
+      className="modal-backdrop"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="glass-card modal-box" style={{ width: '420px', padding: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.125rem' }}>

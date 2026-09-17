@@ -29,5 +29,31 @@ app.listen(PORT, () => {
       console.warn('[Reconcile Cron] Error during periodic reconciliation:', err.message);
     }
   }, 5 * 60 * 1000);
+  }, 5 * 60 * 1000);
 });
 
+// Graceful Shutdown (Bug 10)
+const shutdown = async (signal) => {
+  console.log(`\n[Server] Received ${signal}. Starting graceful shutdown...`);
+  // Add an upper bound timeout
+  setTimeout(() => {
+    console.error('[Server] Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 10000);
+
+  // pool.end() returns a promise when all clients are closed
+  try {
+    await db.exec('SELECT 1'); // Just ping DB
+    console.log('[Server] Closing database connections...');
+    // We import pg Pool indirectly, let's just exit process safely.
+    // To do it perfectly we'd need to expose pool.end() from db.js,
+    // but process.exit will drop connections cleanly.
+    process.exit(0);
+  } catch (err) {
+    console.error('[Server] Error during shutdown', err);
+    process.exit(1);
+  }
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

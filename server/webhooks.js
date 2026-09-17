@@ -49,6 +49,10 @@ export async function handleLiveKitWebhook(req, res) {
 
   try {
     if (eventName === 'participant_joined' && roomInfo && participant) {
+      // Find the actual room UUID, or fallback to the name if not found in our DB
+      const room = await db.queryGet('SELECT id FROM rooms WHERE name = $1', [roomInfo.name]);
+      const roomId = room ? room.id : roomInfo.name;
+
       // Single atomic upsert — no race between concurrent webhooks for same participant.
       // CASE WHEN preserves the original joined_at on reconnect flapping (only resets when
       // the participant had actually left, i.e. left_at IS NOT NULL).
@@ -62,23 +66,38 @@ export async function handleLiveKitWebhook(req, res) {
                                        ELSE live_sessions.joined_at END,
                left_at             = NULL,
                disconnect_reason   = NULL`,
-        [randomUUID(), roomInfo.name, roomInfo.name, participant.identity, participant.name || participant.identity]
+        [randomUUID(), roomId, roomInfo.name, participant.identity, participant.name || participant.identity]
       );
       console.log(`[Webhook] ✅ participant_joined  → room: ${roomInfo.name} | user: ${participant.identity}`);
 
     } else if (eventName === 'participant_left' && roomInfo && participant) {
+      const room = await db.queryGet('SELECT id FROM rooms WHERE name = $1', [roomInfo.name]);
+      const roomId = room ? room.id : roomInfo.name;
+
       await db.queryRun(
         `UPDATE live_sessions SET left_at = CURRENT_TIMESTAMP, disconnect_reason = $1
          WHERE room_id = $2 AND participant_identity = $3 AND left_at IS NULL`,
-        [event.disconnectReason || 'unknown', roomInfo.name, participant.identity]
+        [event.disconnectReason || 'unknown', roomId, participant.identity]
       );
+      
+      // Fix Bug 5: Clean up phantom guest room_members
+      if (participant.identity && participant.identity.startsWith('guest_')) {
+         await db.queryRun(
+           'DELETE FROM room_members WHERE room_id = $1 AND user_id = $2',
+           [roomId, participant.identity]
+         );
+      }
+      
       console.log(`[Webhook] 👋 participant_left  → room: ${roomInfo.name} | user: ${participant.identity}`);
 
     } else if (eventName === 'room_finished' && roomInfo) {
+      const room = await db.queryGet('SELECT id FROM rooms WHERE name = $1', [roomInfo.name]);
+      const roomId = room ? room.id : roomInfo.name;
+
       await db.queryRun(
         `UPDATE live_sessions SET left_at = CURRENT_TIMESTAMP, disconnect_reason = 'room_finished'
          WHERE room_id = $1 AND left_at IS NULL`,
-        [roomInfo.name]
+        [roomId]
       );
       console.log(`[Webhook] 🏁 room_finished → room: ${roomInfo.name} | closed all active sessions`);
     }

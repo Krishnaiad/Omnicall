@@ -93,7 +93,6 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
         if (onSharePresentation) {
           onSharePresentation(cdnUrl, res.file.name, res.file.mimeType, false /* not local */);
         }
-        URL.revokeObjectURL(localUrl); // Clean up blob URL
       }
       setSuccess('✅ CDN upload done — all participants can now see the presentation!');
       setTimeout(() => setSuccess(''), 3000);
@@ -101,6 +100,10 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
       setError(`CDN upload failed: ${err.message}. Presenter view still active.`);
     } finally {
       setUploading(false);
+      // Clean up local blob URL safely after it has been loaded
+      setTimeout(() => {
+        try { URL.revokeObjectURL(localUrl); } catch {}
+      }, 5000);
     }
   };
 
@@ -207,10 +210,33 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
       </div>
 
       {/* In-Call Direct File Upload Box */}
-      <form onSubmit={handleInCallUpload} style={{ padding: '10px', background: 'var(--surface-raised)', borderRadius: '8px', border: '0.5px solid var(--border)', marginBottom: '14px' }}>
+      <form 
+        onSubmit={handleInCallUpload} 
+        onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--accent)'; }}
+        onDragLeave={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--border)'; }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.currentTarget.style.borderColor = 'var(--border)';
+          if (e.dataTransfer.files?.[0]) setSelectedFile(e.dataTransfer.files[0]);
+        }}
+        style={{ padding: '10px', background: 'var(--surface-raised)', borderRadius: '8px', border: '2px dashed var(--border)', marginBottom: '14px', transition: 'border-color 0.2s' }}
+      >
         <div style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <Upload size={13} /> Upload & share new file:
+          <Upload size={13} /> Drag & drop or upload new file:
         </div>
+        
+        {/* Preview step before inject */}
+        {selectedFile && selectedFile.type.startsWith('image/') && (
+          <div style={{ marginBottom: '8px', textAlign: 'center' }}>
+            <img src={URL.createObjectURL(selectedFile)} alt="preview" style={{ maxHeight: '100px', borderRadius: '4px', maxWidth: '100%' }} />
+          </div>
+        )}
+        {selectedFile && selectedFile.type.startsWith('video/') && (
+          <div style={{ marginBottom: '8px', textAlign: 'center' }}>
+            <video src={URL.createObjectURL(selectedFile)} style={{ maxHeight: '100px', borderRadius: '4px', maxWidth: '100%' }} controls muted />
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'stretch' }}>
           <label style={{
             flex: 1,
@@ -220,7 +246,7 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
             gap: '6px',
             padding: '6px 10px',
             borderRadius: '8px',
-            border: '1px dashed var(--border-strong)',
+            border: '1px solid var(--border-strong)',
             background: 'var(--surface)',
             color: selectedFile ? 'var(--text-primary)' : 'var(--text-secondary)',
             fontSize: '0.75rem',

@@ -14,10 +14,13 @@ export default function PollsPanel({ token, room, roomId, user, isHost, onClose 
   const [votingPollId, setVotingPollId] = useState(null);
   const [voteError, setVoteError] = useState('');
 
+  const [isAnonymous, setIsAnonymous] = useState(false);
+
   // 1. Fetch polls on open (Late-Joiner State Recovery)
   useEffect(() => {
     let mounted = true;
     const loadPolls = async () => {
+      setError('');
       try {
         const data = await api.getPolls(token, roomId);
         if (mounted && data.polls) {
@@ -92,7 +95,7 @@ export default function PollsPanel({ token, room, roomId, user, isHost, onClose 
 
     try {
       // A. Write to Express & Postgres FIRST (authoritative host check + DB insert)
-      const data = await api.createPoll(token, roomId, cleanQuestion, cleanOptions);
+      const data = await api.createPoll(token, roomId, cleanQuestion, cleanOptions, isAnonymous);
       if (data.poll) {
         setPolls((prev) => [data.poll, ...prev]);
 
@@ -106,6 +109,7 @@ export default function PollsPanel({ token, room, roomId, user, isHost, onClose 
         setShowCreate(false);
         setQuestion('');
         setOptions(['', '']);
+        setIsAnonymous(false);
       }
     } catch (err) {
       setError(err.message);
@@ -190,7 +194,7 @@ export default function PollsPanel({ token, room, roomId, user, isHost, onClose 
         {isHost && !showCreate && (
           <button
             className="btn-primary"
-            onClick={() => setShowCreate(true)}
+            onClick={() => { setShowCreate(true); setError(''); }}
             style={{ width: '100%', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.85rem' }}
           >
             <Plus size={16} /> Launch New Poll
@@ -232,11 +236,16 @@ export default function PollsPanel({ token, room, roomId, user, isHost, onClose 
               </button>
             )}
 
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '12px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={isAnonymous} onChange={(e) => setIsAnonymous(e.target.checked)} />
+              Anonymous responses (hide voters)
+            </label>
+
             <div style={{ display: 'flex', gap: '8px' }}>
               <button type="submit" disabled={submitting} className="btn-primary" style={{ flex: 1, padding: '6px 12px', fontSize: '0.8rem' }}>
                 {submitting ? 'Launching…' : 'Launch Poll'}
               </button>
-              <button type="button" onClick={() => setShowCreate(false)} className="btn-outline" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+              <button type="button" onClick={() => { setShowCreate(false); setError(''); }} className="btn-outline" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
                 Cancel
               </button>
             </div>

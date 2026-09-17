@@ -267,6 +267,11 @@ async function initTables() {
     await addColumnIfMissing('media_files', 'storage_provider', "TEXT DEFAULT 'local'");
     await addColumnIfMissing('media_files', 'storage_key', 'TEXT');
     await addColumnIfMissing('media_files', 'public_url', 'TEXT');
+    
+    // Feature improvements migrations
+    await addColumnIfMissing('polls', 'anonymous', 'BOOLEAN DEFAULT false');
+    await addColumnIfMissing('chat_messages', 'reactions_json', "TEXT DEFAULT '{}'");
+    await addColumnIfMissing('chat_messages', 'attachment_url', 'TEXT');
 
     for (const idxStmt of INDEX_STATEMENTS) {
       await db.exec(idxStmt).catch(() => {});
