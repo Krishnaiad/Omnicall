@@ -29,7 +29,6 @@ app.listen(PORT, () => {
       console.warn('[Reconcile Cron] Error during periodic reconciliation:', err.message);
     }
   }, 5 * 60 * 1000);
-  }, 5 * 60 * 1000);
 });
 
 // Graceful Shutdown (Bug 10)
