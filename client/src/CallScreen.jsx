@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Room, RoomEvent, Track, LocalVideoTrack } from 'livekit-client';
+import { Room, RoomEvent, Track, LocalVideoTrack, DisconnectReason } from 'livekit-client';
 import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check, UserPlus, Pin, PinOff, Tv, Zap, ZapOff, Volume2, BarChart3, Hand, Edit2, MessageSquareQuote, StopCircle } from 'lucide-react';
 import MediaInjector from './MediaInjector.jsx';
 import ChatPanel from './ChatPanel.jsx';
@@ -158,6 +158,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [showEndMeetingConfirm, setShowEndMeetingConfirm] = useState(false);
   const [newNickname, setNewNickname] = useState('');
+  // Zoom-style notification when disconnected (e.g. connected on another device)
+  const [disconnectModal, setDisconnectModal] = useState(null);
 
   // ─── Room State Service UI States ──────────────────────────────────────────
   const [showWhiteboard, setShowWhiteboard] = useState(false);
@@ -264,6 +266,59 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
     room.on(RoomEvent.ParticipantDisconnected, (participant) => {
       setTracks((prev) => prev.filter((t) => t.identity !== participant.identity));
+    });
+
+    // Zoom-style server & duplicate device disconnect handling
+    room.on(RoomEvent.Disconnected, (reason) => {
+      console.warn('[LiveKit] Room disconnected. Reason:', reason);
+
+      // Immediately shut off local tracks to release camera/mic hardware
+      try {
+        if (room.localParticipant) {
+          room.localParticipant.videoTrackPublications?.forEach((pub) => {
+            try { pub.track?.stop(); } catch (_) {}
+          });
+          room.localParticipant.audioTrackPublications?.forEach((pub) => {
+            try { pub.track?.stop(); } catch (_) {}
+          });
+        }
+      } catch (_) {}
+
+      const isDuplicate =
+        reason === DisconnectReason?.DUPLICATE_IDENTITY ||
+        reason === 'DUPLICATE_IDENTITY' ||
+        reason === 2;
+
+      const isRemoved =
+        reason === DisconnectReason?.PARTICIPANT_REMOVED ||
+        reason === 'PARTICIPANT_REMOVED' ||
+        reason === 4;
+
+      const isRoomClosed =
+        reason === DisconnectReason?.ROOM_DELETED ||
+        reason === DisconnectReason?.ROOM_CLOSED ||
+        reason === 5 ||
+        reason === 10;
+
+      if (isDuplicate) {
+        setDisconnectModal({
+          title: 'Connected on Another Device',
+          message: 'You were disconnected from this meeting because your account joined this meeting from another device or window.',
+          btnText: 'Return to Dashboard',
+        });
+      } else if (isRemoved) {
+        setDisconnectModal({
+          title: 'Removed from Meeting',
+          message: 'You have been removed from this meeting by the host.',
+          btnText: 'Return to Dashboard',
+        });
+      } else if (isRoomClosed) {
+        setDisconnectModal({
+          title: 'Meeting Ended',
+          message: 'The meeting was closed or ended by the room host.',
+          btnText: 'Return to Dashboard',
+        });
+      }
     });
 
     // Handle incoming LiveKit DataPackets
@@ -1357,6 +1412,63 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
                 Update Display Name
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Zoom-style Disconnect Modal */}
+      {disconnectModal && (
+        <div className="modal-backdrop" style={{ zIndex: 99999 }}>
+          <div
+            className="glass-card modal-box"
+            style={{
+              width: '420px',
+              padding: '32px 24px',
+              textAlign: 'center',
+              borderRadius: '16px',
+              border: '1px solid var(--border)',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <div
+              style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '50%',
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+                color: '#ef4444',
+              }}
+            >
+              <Monitor size={28} />
+            </div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
+              {disconnectModal.title}
+            </h3>
+            <p
+              style={{
+                fontSize: '0.875rem',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.6,
+                marginBottom: '24px',
+              }}
+            >
+              {disconnectModal.message}
+            </p>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                setDisconnectModal(null);
+                onLeave();
+              }}
+              style={{ width: '100%', padding: '12px 16px', borderRadius: '8px', fontWeight: 600 }}
+            >
+              {disconnectModal.btnText || 'Return to Dashboard'}
+            </button>
           </div>
         </div>
       )}
