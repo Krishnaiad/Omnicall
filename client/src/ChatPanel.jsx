@@ -131,7 +131,7 @@ export default function ChatPanel({ token, room, user, roomId, onClose }) {
     try {
       if (currentAttachment) {
         const formData = new FormData();
-        formData.append('attachment', currentAttachment);
+        formData.append('file', currentAttachment);
         const uploadRes = await api.uploadChatAttachment(token, roomId, formData);
         uploadedUrl = uploadRes.url;
       }
