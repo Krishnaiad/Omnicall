@@ -714,7 +714,6 @@ input, select, textarea {
   transform: none;
 }
 
-
 .section-title {
   font-size: 1.125rem;
   font-weight: 700;
@@ -949,7 +948,6 @@ input, select, textarea {
   }
 }
 
-
 .video-tile {
   position: relative;
   width: 100%;
@@ -1008,7 +1006,6 @@ input, select, textarea {
   color: #34d399;
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
-
 
 .video-tile video {
   width: 100%;
@@ -1269,7 +1266,7 @@ input, select, textarea {
   }
 }
 
-/* ─── Room Memories & Snapshots Gallery ─── */
+/* âââ Room Memories & Snapshots Gallery âââ */
 .memories-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -1306,7 +1303,7 @@ input, select, textarea {
   background: rgba(11, 15, 25, 0.95);
 }
 
-/* ─── Whiteboard In-Call Video Ribbon ─── */
+/* âââ Whiteboard In-Call Video Ribbon âââ */
 .wb-split-container {
   display: flex;
   flex-direction: column;
@@ -1433,30 +1430,6 @@ input, select, textarea {
   }
 }
 
-
- / *   - - -   M O B I L E   R E S P O N S I V E   T W E A K S   - - -   * / 
- @ m e d i a   ( m a x - w i d t h :   7 6 8 p x )   { 
-     . c a l l - c o n t a i n e r   { 
-         f l e x - d i r e c t i o n :   c o l u m n ; 
-     } 
-     . c a l l - c o n t r o l s   { 
-         f l e x - w r a p :   w r a p ; 
-         p a d d i n g :   8 p x ; 
-         g a p :   4 p x ; 
-         j u s t i f y - c o n t e n t :   c e n t e r ; 
-     } 
-     . c o n t r o l - b t n   { 
-         p a d d i n g :   8 p x ; 
-         b o r d e r - r a d i u s :   5 0 % ; 
-     } 
-     . m o d a l - b o x   { 
-         w i d t h :   9 0 %   ! i m p o r t a n t ; 
-         m a x - w i d t h :   4 0 0 p x ; 
-     } 
- } 
-  
- } 
-
 /* --- MOBILE RESPONSIVE TWEAKS --- */
 @media (max-width: 768px) {
   .call-container {
@@ -1499,11 +1472,27 @@ input, select, textarea {
   }
 }
 
- : f o c u s - v i s i b l e   {   o u t l i n e :   2 p x   s o l i d   v a r ( - - a c c e n t ) ;   o u t l i n e - o f f s e t :   2 p x ;   } 
-  
- 
+/* --- MOBILE RESPONSIVE TWEAKS --- */
+@media (max-width: 768px) {
+  .call-container {
+    flex-direction: column;
+  }
+  .call-controls {
+    flex-wrap: wrap;
+    padding: 8px;
+    gap: 4px;
+    justify-content: center;
+  }
+  .control-btn {
+    padding: 8px;
+    border-radius: 50%;
+  }
+  .modal-box {
+    width: 90% !important;
+    max-width: 400px;
+  }
+}
 
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 
 /* Toasts */
@@ -1518,3 +1507,5 @@ input, select, textarea {
 @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 .slide-in { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 @media (max-width: 768px) { .toast-container { bottom: 0; right: 0; left: 0; padding: 16px; } .toast-message { max-width: none; border-radius: 8px 8px 0 0; border-bottom: none; } }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
