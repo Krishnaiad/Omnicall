@@ -14,7 +14,7 @@ if (!DATABASE_URL) {
 
 const sslOptions = process.env.PG_SSL_CA
   ? { ca: process.env.PG_SSL_CA, rejectUnauthorized: true }
-  : { rejectUnauthorized: process.env.NODE_ENV === 'production' };
+  : { rejectUnauthorized: false };
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
