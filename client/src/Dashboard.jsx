@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from './api.js';
 import { prefetchCallScreen } from './App.jsx';
-import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive, Image as ImageIcon, Download, Search, CheckCircle2, Sparkles, Camera, Eye, Sun, Moon, User } from 'lucide-react';
+import { LogOut, Plus, UserPlus, Video, Film, Upload, Trash2, Users, Shield, Bell, Activity, Radio, AlertTriangle, X, UserCheck, Edit3, Cloud, HardDrive, Image as ImageIcon, Download, Search, CheckCircle2, Sparkles, Camera, Eye, Sun, Moon, User, RefreshCw } from 'lucide-react';
 
 export default function Dashboard({ token, user, initialBootstrap, onLogout, onJoinCall, onUserUpdate }) {
   const [theme, setTheme] = useState(() => {
@@ -228,7 +228,9 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
   const handleOpenAdminDirectory = () => {
     setShowAdminDirectory(true);
-    fetchAdminUsers();
+    if (adminUsersList.length === 0) {
+      fetchAdminUsers();
+    }
   };
 
   const handleOpenProfileModal = () => {
@@ -1081,9 +1083,14 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.125rem', color: 'var(--text-primary)' }}>
                 <Shield size={20} /> Registered Accounts Directory ({adminUsersList.length})
               </div>
-              <button onClick={() => setShowAdminDirectory(false)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
-                <X size={18} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button onClick={fetchAdminUsers} disabled={loadingAdminUsers} style={{ background: 'transparent', color: 'var(--text-muted)' }} title="Refresh Directory">
+                  <RefreshCw size={16} className={loadingAdminUsers ? 'spin' : ''} />
+                </button>
+                <button onClick={() => setShowAdminDirectory(false)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <div style={{ position: 'relative', marginBottom: '16px' }}>
