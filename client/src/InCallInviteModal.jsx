@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
-import { UserPlus, Search, X, Check, Loader2, Link as LinkIcon, Copy } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { UserPlus, Search, X, Check, Loader2, Link as LinkIcon, Copy, RefreshCw } from 'lucide-react';
 import { api } from './api.js';
+import { useToast } from './Toast.jsx';
+import { useFocusTrap } from './useFocusTrap.js';
 
-export default function InCallInviteModal({ token, roomId, roomName, onClose }) {
+export default function InCallInviteModal({ token, roomId, roomName, onClose, isHost }) {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -10,6 +12,10 @@ export default function InCallInviteModal({ token, roomId, roomName, onClose }) 
   const [error, setError] = useState(null);
   const [shareableUrl, setShareableUrl] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const toast = useToast();
+
+  const modalRef = useFocusTrap(true, onClose);
 
   useEffect(() => {
     const fetchLink = async () => {
@@ -30,9 +36,25 @@ export default function InCallInviteModal({ token, roomId, roomName, onClose }) 
     if (!shareableUrl) return;
     navigator.clipboard.writeText(shareableUrl);
     setCopiedLink(true);
+    toast.success('Link copied to clipboard');
     setTimeout(() => setCopiedLink(false), 3000);
   };
 
+  const handleRegenerate = async () => {
+    if (!confirm('Regenerate this link? The old link will immediately stop working for new guests.')) return;
+    setIsRegenerating(true);
+    try {
+      const data = await api.regenerateInviteLink(token, roomId);
+      if (data.inviteToken) {
+        setShareableUrl(`${window.location.origin}/join/${data.inviteToken}`);
+        toast.success('Old link revoked. New link generated.');
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to regenerate link');
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -59,26 +81,24 @@ export default function InCallInviteModal({ token, roomId, roomName, onClose }) 
     try {
       await api.inviteToRoom(token, roomId, userObj.username || userObj.email);
       setInvitedUsers((prev) => new Set(prev).add(userObj.id));
+      toast.success(`Invited ${userObj.name || userObj.username}`);
     } catch (err) {
-      alert(`Could not invite ${userObj.name || userObj.username}: ${err.message}`);
+      toast.error(`Could not invite ${userObj.name || userObj.username}: ${err.message}`);
     }
   };
 
   return (
     <div 
       className="modal-backdrop"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onClose();
-      }}
       role="dialog"
       aria-modal="true"
     >
-      <div className="glass-card modal-box" style={{ width: '420px', padding: '24px' }}>
+      <div ref={modalRef} className="glass-card modal-box" style={{ width: '420px', padding: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.125rem' }}>
             <UserPlus size={20} color="#818cf8" /> Invite People to {roomName}
           </div>
-          <button onClick={onClose} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
+          <button onClick={onClose} style={{ background: 'transparent', color: 'var(--text-muted)' }} aria-label="Close invite modal">
             <X size={18} />
           </button>
         </div>
@@ -87,15 +107,18 @@ export default function InCallInviteModal({ token, roomId, roomName, onClose }) 
         {shareableUrl && (
           <div style={{ marginBottom: '16px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '10px', padding: '12px' }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#a5b4fc', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><LinkIcon size={13} /> 1-Click Shareable Guest Link (24h)</div>
-              <button onClick={async () => {
-                if (confirm('Revoke this link? Guests will no longer be able to use it.')) {
-                  try {
-                    await api.revokeInviteLink(token, roomId);
-                    setShareableUrl('');
-                  } catch (e) { alert(e.message); }
-                }
-              }} style={{ background: 'none', border: 'none', color: '#f87171', fontSize: '0.7rem', cursor: 'pointer', padding: 0 }}>Revoke</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><LinkIcon size={13} /> Shareable Guest Link</div>
+              {isHost && (
+                <button 
+                  onClick={handleRegenerate}
+                  disabled={isRegenerating}
+                  aria-label="Regenerate guest link"
+                  style={{ background: 'none', border: 'none', color: '#f87171', fontSize: '0.7rem', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  {isRegenerating ? <Loader2 size={12} className="spin" /> : <RefreshCw size={12} />}
+                  Regenerate
+                </button>
+              )}
             </div>
             <div style={{ display: 'flex', gap: '6px' }}>
               <input
@@ -112,6 +135,9 @@ export default function InCallInviteModal({ token, roomId, roomName, onClose }) 
                 {copiedLink ? <Check size={14} /> : <Copy size={14} />}
                 {copiedLink ? 'Copied!' : 'Copy'}
               </button>
+            </div>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '8px', lineHeight: 1.4 }}>
+              This link doesn't expire on its own &mdash; anyone who has it can join as a guest.
             </div>
           </div>
         )}

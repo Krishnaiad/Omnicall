@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sparkles, Image as ImageIcon, X, Check } from 'lucide-react';
 
 export const VIDEO_FILTERS = [
@@ -109,13 +109,21 @@ export default function EffectsPicker({ activeFilter, activeBg, onSelectFilter, 
   const currentTier = manualTier || DEVICE_TIER;
   const tierInfo = TIER_LABELS[currentTier];
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && onClose) onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   return (
     <div className="glass-card injector-popover" style={{ width: '400px', maxWidth: '92vw' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
           <Sparkles size={18} color="var(--accent)" /> Video effects & backgrounds
         </div>
-        <button onClick={onClose} className="btn-ghost" style={{ padding: '4px' }}>
+        <button onClick={onClose} className="btn-ghost" style={{ padding: '4px' }} aria-label="Close effects picker">
           <X size={16} />
         </button>
       </div>

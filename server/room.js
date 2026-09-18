@@ -20,6 +20,10 @@ router.get('/join-preview/:token', async (req, res) => {
     if (!room) return res.status(404).json({ error: 'Associated room was not found' });
 
     const owner = await db.queryGet('SELECT name, username FROM users WHERE id = $1', [room.owner_id]);
+    
+    // Count active live sessions for this room
+    const activeCountRow = await db.queryGet('SELECT COUNT(*) as active_count FROM live_sessions WHERE room_id = $1 AND left_at IS NULL', [room.id]);
+    const activeParticipants = parseInt(activeCountRow?.active_count || 0, 10);
 
     res.json({
       ok: true,
@@ -27,6 +31,7 @@ router.get('/join-preview/:token', async (req, res) => {
       roomName: room.name,
       hostName: owner?.name || 'Room Creator',
       inviteToken: token,
+      activeParticipants,
     });
   } catch (err) {
     console.error('Join preview failed:', err);
@@ -1057,22 +1062,44 @@ router.post('/:roomId/invite-link', async (req, res) => {
     }
 
     // Check for existing valid link
-    let link = await db.queryGet('SELECT token, expires_at FROM invite_links WHERE room_id = $1 AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)', [roomId]);
+    let link = await db.queryGet('SELECT token FROM invite_links WHERE room_id = $1', [roomId]);
     
     if (!link) {
       const token = randomUUID().replace(/-/g, '').slice(0, 16);
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h expiry
       await db.queryRun(
-        'INSERT INTO invite_links (id, room_id, token, created_by, expires_at) VALUES ($1, $2, $3, $4, $5)',
-        [randomUUID(), roomId, token, req.user.id, expiresAt]
+        'INSERT INTO invite_links (id, room_id, token, created_by) VALUES ($1, $2, $3, $4)',
+        [randomUUID(), roomId, token, req.user.id]
       );
       link = { token };
     }
 
-    res.json({ ok: true, inviteToken: link.token, joinPath: `/join/${link.token}` });
+    res.json({ inviteToken: link.token });
   } catch (err) {
-    console.error('Generate invite link failed:', err);
-    res.status(500).json({ error: 'Failed to create invite link' });
+    console.error('Invite link generation failed:', err);
+    res.status(500).json({ error: 'Failed to generate invite link' });
+  }
+});
+
+// Regenerate Shareable Invite Link
+router.post('/:roomId/invite-link/regenerate', async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = $1', [roomId]);
+    if (!room || room.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the room owner can regenerate guest links' });
+    }
+
+    await db.queryRun('DELETE FROM invite_links WHERE room_id = $1', [roomId]);
+    const token = randomUUID().replace(/-/g, '').slice(0, 16);
+    await db.queryRun(
+      'INSERT INTO invite_links (id, room_id, token, created_by) VALUES ($1, $2, $3, $4)',
+      [randomUUID(), roomId, token, req.user.id]
+    );
+
+    res.json({ ok: true, inviteToken: token });
+  } catch (err) {
+    console.error('Regenerate invite link failed:', err);
+    res.status(500).json({ error: 'Failed to regenerate invite link' });
   }
 });
 
@@ -1094,5 +1121,3 @@ router.delete('/:roomId/invite-link', async (req, res) => {
 });
 
 export default router;
-
-

@@ -314,9 +314,9 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` },
     }),
 
-  revokeInviteLink: (token, roomId) =>
-    request(`/api/rooms/${roomId}/invite-link`, {
-      method: 'DELETE',
+  regenerateInviteLink: (token, roomId) =>
+    request(`/api/rooms/${roomId}/invite-link/regenerate`, {
+      method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     }),
 

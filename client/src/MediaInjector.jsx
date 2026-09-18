@@ -3,6 +3,7 @@ import { api } from './api.js';
 import { Film, Play, StopCircle, X, Monitor, Upload, Cloud, AlertCircle, Sparkles } from 'lucide-react';
 import { LocalVideoTrack } from 'livekit-client';
 import { useMountedRef } from './hooks/useMountedRef.js';
+import { useToast } from './Toast.jsx';
 
 export default function MediaInjector({ token, room, onClose, onActiveStateChange, onSharePresentation }) {
   const [clips, setClips] = useState([]);
@@ -12,6 +13,8 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  
+  const toast = useToast();
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -161,7 +164,7 @@ export default function MediaInjector({ token, room, onClose, onActiveStateChang
       }
     } catch (err) {
       console.error('Tile stream injection failed:', err);
-      alert(`Could not stream media into tile: ${err.message}`);
+      toast.error(`Could not stream media into tile: ${err.message}`);
     }
   };
 

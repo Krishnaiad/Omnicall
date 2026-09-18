@@ -6,6 +6,7 @@ import React, { Suspense } from 'react';
 import EffectsPicker, { VIDEO_FILTERS, VIRTUAL_BACKGROUNDS } from './EffectsPicker.jsx';
 import InCallInviteModal from './InCallInviteModal.jsx';
 import LiveCaptionsOverlay from './LiveCaptionsOverlay.jsx';
+import { useFocusTrap } from './useFocusTrap.js';
 
 const MediaInjector = React.lazy(() => import('./MediaInjector.jsx'));
 const ChatPanel = React.lazy(() => import('./ChatPanel.jsx'));
@@ -162,6 +163,12 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   const [newNickname, setNewNickname] = useState('');
   // Zoom-style notification when disconnected (e.g. connected on another device)
   const [disconnectModal, setDisconnectModal] = useState(null);
+
+  const renameRef = useFocusTrap(showRenameModal, () => setShowRenameModal(false));
+  const endMeetingRef = useFocusTrap(showEndMeetingConfirm, () => setShowEndMeetingConfirm(false));
+  const disconnectRef = useFocusTrap(!!disconnectModal, () => {
+    if (disconnectModal.canClose) setDisconnectModal(null);
+  });
 
   // ─── Room State Service UI States ──────────────────────────────────────────
   const [showWhiteboard, setShowWhiteboard] = useState(false);
@@ -1369,13 +1376,13 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
       {/* Owner End Meeting for All Confirmation Modal */}
       {showEndMeetingConfirm && (
-        <div className="modal-backdrop">
-          <div className="glass-card modal-box" style={{ width: '360px' }}>
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div ref={endMeetingRef} className="glass-card modal-box" style={{ width: '360px' }}>
             <span style={{ fontWeight: 600, fontSize: '1.125rem', display: 'block', marginBottom: '12px' }}>Meeting Control</span>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
               You are the room creator. Would you like to leave the meeting or end it for all participants?
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexDirection: 'column' }}>
               <button
                 className="btn-primary"
                 onClick={handleEndMeetingForAll}
@@ -1403,8 +1410,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
       {/* Rename Modal */}
       {showRenameModal && (
-        <div className="modal-backdrop">
-          <div className="glass-card modal-box" style={{ width: '320px' }}>
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div ref={renameRef} className="glass-card modal-box" style={{ width: '320px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <span style={{ fontWeight: 600 }}>Change In-Room Nickname</span>
               <button onClick={() => setShowRenameModal(false)} style={{ background: 'transparent', color: 'var(--text-muted)' }}>
@@ -1429,8 +1436,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
       {/* Zoom-style Disconnect Modal */}
       {disconnectModal && (
-        <div className="modal-backdrop" style={{ zIndex: 99999 }}>
+        <div className="modal-backdrop" style={{ zIndex: 99999 }} role="dialog" aria-modal="true">
           <div
+            ref={disconnectRef}
             className="glass-card modal-box"
             style={{
               width: '420px',

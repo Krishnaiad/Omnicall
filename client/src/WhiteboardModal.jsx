@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { RoomEvent } from 'livekit-client';
 import { X, Trash2, Edit2, Eraser, Download, Camera, Users, Eye, EyeOff } from 'lucide-react';
 import { api } from './api.js';
+import { useFocusTrap } from './useFocusTrap.js';
 
 const COLORS = ['#ffffff', '#6366f1', '#ec4899', '#10b981', '#fbbf24', '#ef4444', '#38bdf8'];
 const SIZES = [2, 4, 8, 14];
@@ -44,6 +45,8 @@ export default function WhiteboardModal({ token, room, roomId, isHost, videoTrac
   const [showVideoRibbon, setShowVideoRibbon] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const modalRef = useFocusTrap(true, onClose);
 
   const drawSegment = useCallback((ctx, fromX, fromY, toX, toY, color, size) => {
     ctx.beginPath();
@@ -235,8 +238,8 @@ export default function WhiteboardModal({ token, room, roomId, isHost, videoTrac
   };
 
   return (
-    <div className="modal-backdrop" style={{ zIndex: 1200 }}>
-      <div className="glass-card" style={{ width: '95vw', maxWidth: '1100px', height: '90vh', display: 'flex', flexDirection: 'column', padding: '14px', overflow: 'hidden' }}>
+    <div className="modal-backdrop" style={{ zIndex: 1200 }} role="dialog" aria-modal="true">
+      <div ref={modalRef} className="glass-card" style={{ width: '95vw', maxWidth: '1100px', height: '90vh', display: 'flex', flexDirection: 'column', padding: '14px', overflow: 'hidden' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>

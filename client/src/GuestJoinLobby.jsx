@@ -71,8 +71,23 @@ export default function GuestJoinLobby({ inviteToken, onGuestJoinSuccess, onGoTo
           )}
         </div>
 
+        {!loading && error && (
+          <button
+            className="btn-outline"
+            style={{ width: '100%', marginTop: '16px', justifyContent: 'center' }}
+            onClick={onGoToLogin}
+          >
+            Back to Sign In
+          </button>
+        )}
+
         {preview && (
           <form onSubmit={handleJoin}>
+            <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '12px', marginBottom: '16px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              {preview.activeParticipants > 0 
+                ? `${preview.activeParticipants} ${preview.activeParticipants === 1 ? 'person is' : 'people are'} already in the call`
+                : 'No one has joined yet — you may be the first one in'}
+            </div>
             {error && (
               <div style={{ fontSize: '0.8rem', color: '#f87171', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <AlertCircle size={14} /> {error}

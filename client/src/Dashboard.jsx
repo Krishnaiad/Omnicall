@@ -877,7 +877,17 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         </p>
 
         {loadingMemories ? (
-          <p style={{ color: 'var(--text-muted)' }}>Loading your saved memories...</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
+            {[1, 2, 3, 4].map(n => (
+              <div key={n} className="memory-card" style={{ background: 'var(--surface)' }}>
+                <div className="skeleton-shimmer" style={{ width: '100%', height: '140px', borderTopLeftRadius: '10px', borderTopRightRadius: '10px' }} />
+                <div style={{ padding: '12px' }}>
+                  <div className="skeleton-shimmer" style={{ width: '40%', height: '14px', borderRadius: '4px', marginBottom: '8px' }} />
+                  <div className="skeleton-shimmer" style={{ width: '60%', height: '12px', borderRadius: '4px' }} />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : memories.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '28px', background: 'var(--surface)', borderRadius: '12px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
             <Camera size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
@@ -946,8 +956,15 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
             <span className="neutral-badge" style={{ fontSize: '0.75rem' }}>Admin visibility only</span>
           </div>
 
-          {!healthMetrics ? (
-            <p style={{ color: 'var(--text-muted)' }}>Loading system metrics...</p>
+          {loadingMetrics || !healthMetrics ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+              {[1, 2, 3, 4].map(n => (
+                <div key={n} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', padding: '14px 16px', borderRadius: '10px' }}>
+                  <div className="skeleton-shimmer" style={{ width: '40%', height: '10px', borderRadius: '4px', marginBottom: '8px' }} />
+                  <div className="skeleton-shimmer" style={{ width: '60%', height: '24px', borderRadius: '4px' }} />
+                </div>
+              ))}
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
