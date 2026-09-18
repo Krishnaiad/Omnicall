@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Monitor, X, Maximize2, Minimize2, RotateCcw, Download, Camera, Eye, FileText, User, AlertCircle } from 'lucide-react';
 import { api } from './api.js';
 
-export default function PresentationStage({ media, isPresenter, token, roomId, roomName, onStopPresentation, presenterTrack, dataSaverMode, isPresenterPip, onTogglePip }) {
+export default function PresentationStage({ media, isPresenter, token, roomId, roomName, onStopPresentation, presenterTrack, screenTrack, dataSaverMode, isPresenterPip, onTogglePip }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLooping, setIsLooping] = useState(true);
   const [downloading, setDownloading] = useState(false);
@@ -42,6 +42,25 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
       };
     }
   }, [presenterTrack, showPip]);
+
+  useEffect(() => {
+    const el = mediaRef.current;
+    const track = screenTrack?.track || screenTrack;
+    if (el && track && typeof track.attach === 'function') {
+      try {
+        track.attach(el);
+      } catch (err) {
+        console.warn('[PresentationStage] Failed to attach screen track:', err);
+      }
+      return () => {
+        if (typeof track.detach === 'function') {
+          try {
+            track.detach(el);
+          } catch {}
+        }
+      };
+    }
+  }, [screenTrack, manualPreview, isPresenter]);
 
   if (!media) return null;
 
@@ -259,8 +278,17 @@ export default function PresentationStage({ media, isPresenter, token, roomId, r
               controls
               autoPlay
               loop={isLooping}
+              playsInline
               className="presentation-media-video"
-              style={{ maxHeight: isFullscreen ? '85vh' : '65vh', width: '100%', borderRadius: '8px' }}
+              style={{ maxHeight: isFullscreen ? '85vh' : '65vh', width: 'auto', maxWidth: '100%', outline: 'none', borderRadius: '8px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+            />
+          ) : isScreenshare ? (
+            <video
+              ref={mediaRef}
+              autoPlay
+              playsInline
+              className="presentation-media-video"
+              style={{ maxHeight: isFullscreen ? '85vh' : '65vh', width: 'auto', maxWidth: '100%', outline: 'none', borderRadius: '8px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
             />
           ) : (
             <div style={{ padding: '20px', textAlign: 'center', width: '100%' }}>

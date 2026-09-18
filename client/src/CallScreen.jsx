@@ -201,10 +201,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
   const isOwner = (roomData.owner_id && String(roomData.owner_id) === String(user.id)) || roomData.role === 'owner';
 
-  const addTrack = useCallback((sid, kind, identity, name, isLocal, track) => {
+  const addTrack = useCallback((sid, kind, identity, name, isLocal, track, trackName) => {
     setTracks((prev) => {
       if (prev.some((t) => t.sid === sid)) return prev;
-      return [...prev, { sid, kind, identity, name, isLocal, track }];
+      return [...prev, { sid, kind, identity, name, isLocal, track, trackName }];
     });
   }, []);
 
@@ -245,11 +245,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
       // Only add if it's a real LiveKit Track with attach()
       if (track && typeof track.attach === 'function') {
-        // Exclude screen share tracks from normal participant camera grid (handled by presentation stage)
-        if (publication.source === Track.Source.ScreenShare || track.source === Track.Source.ScreenShare || publication.trackName === 'screen-share') {
-          return;
-        }
-        addTrack(publication.trackSid, track.kind, participant.identity, participant.name, false, track);
+        const isScreenShare = publication.source === Track.Source.ScreenShare || track.source === Track.Source.ScreenShare || publication.trackName === 'screen-share';
+        const finalTrackName = isScreenShare ? 'screen-share' : publication.trackName;
+        addTrack(publication.trackSid, track.kind, participant.identity, participant.name, false, track, finalTrackName);
       }
     });
 
@@ -261,11 +259,9 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       // publication.track is the LiveKit LocalTrack — validate before adding
       const track = publication.track;
       if (track && typeof track.attach === 'function') {
-        // Exclude screen share tracks from normal participant camera grid (handled by presentation stage)
-        if (publication.source === Track.Source.ScreenShare || track.source === Track.Source.ScreenShare || publication.trackName === 'screen-share') {
-          return;
-        }
-        addTrack(publication.trackSid, track.kind, participant.identity, participant.name || displayName, true, track);
+        const isScreenShare = publication.source === Track.Source.ScreenShare || track.source === Track.Source.ScreenShare || publication.trackName === 'screen-share';
+        const finalTrackName = isScreenShare ? 'screen-share' : publication.trackName;
+        addTrack(publication.trackSid, track.kind, participant.identity, participant.name || displayName, true, track, finalTrackName);
       }
     });
 
@@ -922,7 +918,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   const isPresenter = sharedMedia && sharedMedia.presenterName === displayName;
 
   const pinnedTrack = videoTracks.find((t) => t.sid === pinnedTrackSid);
-  const unpinnedVideoTracks = pinnedTrack ? videoTracks.filter((t) => t.sid !== pinnedTrackSid) : videoTracks;
+  const unpinnedVideoTracks = videoTracks.filter((t) => t.trackName !== 'screen-share' && t.sid !== pinnedTrackSid);
 
   return (
     <div className="call-layout">
@@ -989,8 +985,13 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             onStopPresentation={handleStopPresentation}
             presenterTrack={
               sharedMedia
-                ? (videoTracks.find((t) => (t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName) && t.kind === 'video')?.track
-                   || videoTracks.find((t) => (t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName) && t.kind === 'video'))
+                ? (videoTracks.find((t) => (t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName) && t.kind === 'video' && t.trackName !== 'screen-share')?.track
+                   || videoTracks.find((t) => (t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName) && t.kind === 'video' && t.trackName !== 'screen-share'))
+                : null
+            }
+            screenTrack={
+              sharedMedia && sharedMedia.mediaType === 'video/screenshare'
+                ? videoTracks.find((t) => t.trackName === 'screen-share' && (t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName))?.track
                 : null
             }
             dataSaverMode={dataSaverMode}
