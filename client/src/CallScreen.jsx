@@ -1008,7 +1008,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
                   activeFilter={activeFilter}
                   activeBg={activeBg}
                   isPinned={true}
-                  onTogglePin={handleTogglePin}
+                  onTogglePin={() => setPinnedTrackSid(null)}
                   isSpeaking={speakingIdentities.has(pinnedTrack.identity)}
                   isDataSaver={dataSaverMode}
                 />
@@ -1039,7 +1039,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
                   activeFilter={activeFilter}
                   activeBg={activeBg}
                   isPinned={false}
-                  onTogglePin={handleTogglePin}
+                  onTogglePin={() => setPinnedTrackSid(prev => prev === item.sid ? null : item.sid)}
                   isSpeaking={speakingIdentities.has(item.identity)}
                   isDataSaver={dataSaverMode}
                   onStopTileStream={item.isLocal && injectingClip ? handleStopTileStream : undefined}
