@@ -7,6 +7,14 @@ class MockRedis extends EventEmitter {
   constructor() {
     super();
     this.sets = new Map();
+    this.kv = new Map();
+  }
+  async get(key) {
+    return this.kv.get(key) || null;
+  }
+  async set(key, value) {
+    this.kv.set(key, value);
+    return 'OK';
   }
   async sismember(key, member) {
     const s = this.sets.get(key);
