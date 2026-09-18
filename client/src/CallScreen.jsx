@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Room, RoomEvent, Track, LocalVideoTrack, DisconnectReason } from 'livekit-client';
+import { Room, RoomEvent, Track, LocalVideoTrack, LocalAudioTrack, DisconnectReason } from 'livekit-client';
 import { Mic, MicOff, Video as VideoIcon, VideoOff, Film, MessageSquare, PhoneOff, Sparkles, Camera, Edit3, X, CameraOff, Monitor, ShieldAlert, Check, UserPlus, Pin, PinOff, Tv, Zap, ZapOff, Volume2, BarChart3, Hand, Edit2, MessageSquareQuote, StopCircle } from 'lucide-react';
 import { captureRoomSnapshot } from './snapshotUtils.js';
 import React, { Suspense } from 'react';
@@ -191,6 +191,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   const roomRef = useRef(null);
   const screenTrackRef = useRef(null);
   const screenLkTrackRef = useRef(null);
+  const screenAudioTrackRef = useRef(null);
+  const screenAudioLkTrackRef = useRef(null);
   const timerRefs = useRef([]);
 
   const safeTimeout = useCallback((fn, ms) => {
@@ -254,7 +256,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       // Only add if it's a real LiveKit Track with attach()
       if (track && typeof track.attach === 'function') {
         const isScreenShare = publication.source === Track.Source.ScreenShare || track.source === Track.Source.ScreenShare || publication.trackName === 'screen-share';
-        const finalTrackName = isScreenShare ? 'screen-share' : publication.trackName;
+        const isScreenAudio = publication.source === Track.Source.ScreenShareAudio || track.source === Track.Source.ScreenShareAudio || publication.trackName === 'screen-audio';
+        const finalTrackName = isScreenShare ? 'screen-share' : (isScreenAudio ? 'screen-audio' : publication.trackName);
         addTrack(publication.trackSid, track.kind, participant.identity, participant.name, false, track, finalTrackName);
       }
     });
@@ -268,7 +271,8 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       const track = publication.track;
       if (track && typeof track.attach === 'function') {
         const isScreenShare = publication.source === Track.Source.ScreenShare || track.source === Track.Source.ScreenShare || publication.trackName === 'screen-share';
-        const finalTrackName = isScreenShare ? 'screen-share' : publication.trackName;
+        const isScreenAudio = publication.source === Track.Source.ScreenShareAudio || track.source === Track.Source.ScreenShareAudio || publication.trackName === 'screen-audio';
+        const finalTrackName = isScreenShare ? 'screen-share' : (isScreenAudio ? 'screen-audio' : publication.trackName);
         addTrack(publication.trackSid, track.kind, participant.identity, participant.name || displayName, true, track, finalTrackName);
       }
     });
@@ -683,6 +687,10 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       try { screenTrackRef.current.stop(); } catch {}
       screenTrackRef.current = null;
     }
+    if (screenAudioTrackRef.current) {
+      try { screenAudioTrackRef.current.stop(); } catch {}
+      screenAudioTrackRef.current = null;
+    }
 
     if (screenLkTrackRef.current && roomRef.current?.localParticipant) {
       try {
@@ -693,11 +701,27 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       try { screenLkTrackRef.current.stop(); } catch {}
       screenLkTrackRef.current = null;
     }
+    
+    if (screenAudioLkTrackRef.current && roomRef.current?.localParticipant) {
+      try {
+        await roomRef.current.localParticipant.unpublishTrack(screenAudioLkTrackRef.current, true);
+      } catch (err) {}
+      try { screenAudioLkTrackRef.current.stop(); } catch {}
+      screenAudioLkTrackRef.current = null;
+    }
 
     // Also sweep any remaining screen share publications
     if (roomRef.current?.localParticipant) {
       for (const pub of roomRef.current.localParticipant.videoTrackPublications.values()) {
         if (pub.source === Track.Source.ScreenShare || pub.trackName === 'screen-share' || pub.track?.source === Track.Source.ScreenShare) {
+          try {
+            await roomRef.current.localParticipant.unpublishTrack(pub.track, true);
+          } catch {}
+          removeTrack(pub.trackSid);
+        }
+      }
+      for (const pub of roomRef.current.localParticipant.audioTrackPublications.values()) {
+        if (pub.source === Track.Source.ScreenShareAudio || pub.trackName === 'screen-audio' || pub.track?.source === Track.Source.ScreenShareAudio) {
           try {
             await roomRef.current.localParticipant.unpublishTrack(pub.track, true);
           } catch {}
@@ -842,6 +866,11 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
       const videoTrack = stream.getVideoTracks()[0];
       screenTrackRef.current = videoTrack;
+      
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) {
+        screenAudioTrackRef.current = audioTrack;
+      }
 
       videoTrack.onended = () => {
         handleStopPresentation();
@@ -851,6 +880,12 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
         const lkTrack = new LocalVideoTrack(videoTrack, { name: 'screen-share' });
         screenLkTrackRef.current = lkTrack;
         await roomRef.current.localParticipant.publishTrack(lkTrack, { source: Track.Source.ScreenShare });
+        
+        if (audioTrack) {
+          const lkAudioTrack = new LocalAudioTrack(audioTrack, { name: 'screen-audio' });
+          screenAudioLkTrackRef.current = lkAudioTrack;
+          await roomRef.current.localParticipant.publishTrack(lkAudioTrack, { source: Track.Source.ScreenShareAudio });
+        }
       }
 
       setIsSharingScreen(true);
