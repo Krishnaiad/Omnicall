@@ -49,11 +49,9 @@ export async function handleLiveKitWebhook(req, res) {
 
   try {
     if (eventName === 'participant_joined' && roomInfo && participant) {
-      // Find the actual room UUID, or fallback to the name if not found in our DB
-      const room = await db.queryGet('SELECT id FROM rooms WHERE name = $1', [roomInfo.name]);
-      const roomId = room ? room.id : roomInfo.name;
+      const roomId = roomInfo.name;
 
-      // Single atomic upsert — no race between concurrent webhooks for same participant.
+      // Single atomic upsert - no race between concurrent webhooks for same participant.
       // CASE WHEN preserves the original joined_at on reconnect flapping (only resets when
       // the participant had actually left, i.e. left_at IS NOT NULL).
       await db.queryRun(
@@ -68,11 +66,10 @@ export async function handleLiveKitWebhook(req, res) {
                disconnect_reason   = NULL`,
         [randomUUID(), roomId, roomInfo.name, participant.identity, participant.name || participant.identity]
       );
-      console.log(`[Webhook] ✅ participant_joined  → room: ${roomInfo.name} | user: ${participant.identity}`);
+      console.log(`[Webhook] ✅ participant_joined  → room: ${roomId} | user: ${participant.identity}`);
 
     } else if (eventName === 'participant_left' && roomInfo && participant) {
-      const room = await db.queryGet('SELECT id FROM rooms WHERE name = $1', [roomInfo.name]);
-      const roomId = room ? room.id : roomInfo.name;
+      const roomId = roomInfo.name;
 
       await db.queryRun(
         `UPDATE live_sessions SET left_at = CURRENT_TIMESTAMP, disconnect_reason = $1
@@ -88,11 +85,10 @@ export async function handleLiveKitWebhook(req, res) {
          );
       }
       
-      console.log(`[Webhook] 👋 participant_left  → room: ${roomInfo.name} | user: ${participant.identity}`);
+      console.log(`[Webhook] 👋 participant_left  → room: ${roomId} | user: ${participant.identity}`);
 
     } else if (eventName === 'room_finished' && roomInfo) {
-      const room = await db.queryGet('SELECT id FROM rooms WHERE name = $1', [roomInfo.name]);
-      const roomId = room ? room.id : roomInfo.name;
+      const roomId = roomInfo.name;
 
       await db.queryRun(
         `UPDATE live_sessions SET left_at = CURRENT_TIMESTAMP, disconnect_reason = 'room_finished'

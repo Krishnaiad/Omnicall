@@ -83,7 +83,6 @@ router.get('/stream', (req, res) => {
     'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive',
     'X-Accel-Buffering': 'no',     // Disable nginx buffering
-    'Access-Control-Allow-Origin': '*',
   });
 
   // Send initial CONNECTED event so client knows the stream is live

@@ -86,8 +86,16 @@ export default function InCallInviteModal({ token, roomId, roomName, onClose }) 
         {/* 1-Click Shareable Guest Invite Link */}
         {shareableUrl && (
           <div style={{ marginBottom: '16px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '10px', padding: '12px' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#a5b4fc', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <LinkIcon size={13} /> 1-Click Shareable Guest Link
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#a5b4fc', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><LinkIcon size={13} /> 1-Click Shareable Guest Link (24h)</div>
+              <button onClick={async () => {
+                if (confirm('Revoke this link? Guests will no longer be able to use it.')) {
+                  try {
+                    await api.revokeInviteLink(token, roomId);
+                    setShareableUrl('');
+                  } catch (e) { alert(e.message); }
+                }
+              }} style={{ background: 'none', border: 'none', color: '#f87171', fontSize: '0.7rem', cursor: 'pointer', padding: 0 }}>Revoke</button>
             </div>
             <div style={{ display: 'flex', gap: '6px' }}>
               <input

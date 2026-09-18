@@ -12,7 +12,7 @@ const router = Router();
 router.use(requireAuth);
 
 const uploadsDir = path.resolve(process.env.UPLOADS_DIR || './uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+try { if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true }); } catch (e) { console.warn('Could not create uploads dir:', e.message); }
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadsDir),

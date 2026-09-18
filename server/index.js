@@ -23,7 +23,7 @@ console.error = (...args) => logger.error(...args);
 console.warn = (...args) => logger.warn(...args);
 
 const app = express();
-
+app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 4000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || '*';
@@ -35,7 +35,7 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         connectSrc: ["'self'", 'https://omnicall-api.onrender.com', 'ws:', 'wss:'],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
         mediaSrc: ["'self'", 'blob:', 'https:'],
@@ -49,6 +49,7 @@ const CORS_ALLOWED_ORIGINS = new Set([
   'https://omnicall-lac.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000',
+  ...(process.env.CLIENT_ORIGIN ? [process.env.CLIENT_ORIGIN] : []),
   ...(process.env.EXTRA_ALLOWED_ORIGINS ? process.env.EXTRA_ALLOWED_ORIGINS.split(',').map(o => o.trim()) : []),
 ]);
 
@@ -100,9 +101,16 @@ app.use('/api/', apiLimiter);
 
 
 import path from 'path';
+import { requireAuth } from './auth.js';
 
-// Serve local uploads
-app.use('/uploads', express.static(path.resolve(process.env.UPLOADS_DIR || './uploads')));
+// Secure local uploads with auth check (query token for media streams, header for downloads)
+app.use('/uploads', (req, res, next) => {
+  // Simple token extraction if not provided in header
+  if (!req.headers.authorization && req.query.token) {
+    req.headers.authorization = `Bearer ${req.query.token}`;
+  }
+  next();
+}, requireAuth, express.static(path.resolve(process.env.UPLOADS_DIR || './uploads')));
 
 // API Routers
 app.use('/api/auth', authRouter);
@@ -135,6 +143,14 @@ async function checkStorage(provider) {
     clearTimeout(timeoutId); // always clear the timer, even on happy path
   }
 }
+
+// Background Cleanup Job: Sweep orphaned guests
+setInterval(() => {
+  // Use a simple time threshold compatible with postgres and sqlite
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  db.queryRun("DELETE FROM room_members WHERE role = 'guest' AND joined_at < $1", [oneDayAgo])
+    .catch(err => console.warn('[Cleanup] Failed to sweep guests:', err.message));
+}, 60 * 60 * 1000); // Every hour
 
 // Production Health Check (DB + Storage)
 app.get('/health', async (_req, res) => {

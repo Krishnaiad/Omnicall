@@ -13,7 +13,7 @@ const router = Router();
 router.get('/join-preview/:token', async (req, res) => {
   const { token } = req.params;
   try {
-    const link = await db.queryGet('SELECT * FROM invite_links WHERE token = $1', [token]);
+    const link = await db.queryGet('SELECT * FROM invite_links WHERE token = $1 AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)', [token]);
     if (!link) return res.status(404).json({ error: 'Invite link is invalid or has expired' });
 
     const room = await db.queryGet('SELECT id, name, owner_id FROM rooms WHERE id = $1', [link.room_id]);
@@ -46,7 +46,7 @@ router.post('/guest-join/:token', async (req, res) => {
   const guestUserId = `guest_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
   try {
-    const link = await db.queryGet('SELECT * FROM invite_links WHERE token = $1', [token]);
+    const link = await db.queryGet('SELECT * FROM invite_links WHERE token = $1 AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)', [token]);
     if (!link) return res.status(404).json({ error: 'Invite link is invalid or expired' });
 
     const room = await db.queryGet('SELECT id, name FROM rooms WHERE id = $1', [link.room_id]);
@@ -276,7 +276,7 @@ router.get('/:roomId/messages', async (req, res) => {
 });
 
 const uploadsDir = path.resolve(process.env.UPLOADS_DIR || './uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+try { if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true }); } catch (e) { console.warn('Could not create uploads dir:', e.message); }
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -287,15 +287,27 @@ const upload = multer({
     },
   }),
   limits: { fileSize: 25 * 1024 * 1024 }, // 25MB max for chat
+  fileFilter: (req, file, cb) => {
+    // Only allow common attachment types
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'text/plain'];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Invalid file type'));
+  }
 });
 
 // Local-only upload for chat attachments (Improvement 1)
-router.post('/:roomId/messages/attachments', upload.single('file'), async (req, res) => {
+router.post('/:roomId/messages/attachments', async (req, res, next) => {
+  try {
+    const memberCheck = await isMember(req.params.roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to verify membership' });
+  }
+}, upload.single('file'), async (req, res) => {
   const { roomId } = req.params;
   try {
-    const memberCheck = await isMember(roomId, req.user.id);
-    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
-    if (!req.file) return res.status(400).json({ error: 'No file provided' });
+    if (!req.file) return res.status(400).json({ error: 'No file provided or invalid type' });
 
     // Since we are storing locally, we return the public URL path
     const publicUrl = `/uploads/${path.basename(req.file.path)}`;
@@ -353,6 +365,7 @@ router.patch('/:roomId/messages/:messageId/reactions', async (req, res) => {
 
     // Ensure it's a valid JSON string for sqlite/postgres
     const reactionsJson = JSON.stringify(reactions || {});
+    if (reactionsJson.length > 2000) return res.status(400).json({ error: 'Reactions payload too large' });
 
     await db.queryRun(
       'UPDATE chat_messages SET reactions_json = $1 WHERE id = $2 AND room_id = $3',
@@ -424,7 +437,7 @@ router.post('/:roomId/end-meeting', async (req, res) => {
     const { apiKey, apiSecret, httpUrl } = getLiveKitCredentials();
     if (apiKey && apiSecret && httpUrl) {
       try {
-        const { RoomServiceClient } = await import('livekit-server-sdk');
+        // Removed dynamic RoomServiceClient import
         const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
         await roomService.deleteRoom(roomId).catch(() => {});
       } catch (err) {
@@ -461,7 +474,7 @@ router.delete('/:roomId', async (req, res) => {
     const { apiKey, apiSecret, httpUrl } = getLiveKitCredentials();
     if (apiKey && apiSecret && httpUrl) {
       try {
-        const { RoomServiceClient } = await import('livekit-server-sdk');
+        // Removed dynamic RoomServiceClient import
         const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
         await roomService.deleteRoom(roomId).catch(() => {});
       } catch (_) {}
@@ -585,7 +598,7 @@ router.get('/:roomId/live-status', async (req, res) => {
     let livekitParticipants = [];
     if (apiKey && apiSecret && httpUrl) {
       try {
-        const { RoomServiceClient } = await import('livekit-server-sdk');
+        // Removed dynamic RoomServiceClient import
         const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
         livekitParticipants = await roomService.listParticipants(roomId);
       } catch (err) {
@@ -622,7 +635,7 @@ export async function reconcileRoomSessions(roomId) {
 
   let livekitParticipants = [];
   try {
-    const { RoomServiceClient } = await import('livekit-server-sdk');
+    // Removed dynamic RoomServiceClient import
     const roomService = new RoomServiceClient(httpUrl, apiKey, apiSecret);
     livekitParticipants = await roomService.listParticipants(roomId);
   } catch (err) {
@@ -678,24 +691,27 @@ router.post('/:roomId/raise-hand', async (req, res) => {
     // Serialize concurrent hand-raises per room via a Postgres advisory lock.
     // pg_advisory_xact_lock is held for the duration of the transaction,
     // so MAX(sequence_num)+1 is safe — no two inserts for this room can race.
+    let actualRaiseId = raiseId;
     await db.transaction(async (tx) => {
       await tx.queryRun('SELECT pg_advisory_xact_lock(hashtext($1))', [roomId]);
-      await tx.queryRun(
+      const row = await tx.queryGet(
         `INSERT INTO hand_raises (id, room_id, user_id, user_name, sequence_num)
          VALUES ($1, $2, $3, $4,
            (SELECT COALESCE(MAX(sequence_num), 0) + 1 FROM hand_raises WHERE room_id = $2)
          )
          ON CONFLICT (room_id, user_id) DO UPDATE
            SET sequence_num = EXCLUDED.sequence_num,
-               raised_at    = CURRENT_TIMESTAMP`,
+               raised_at    = CURRENT_TIMESTAMP
+         RETURNING id`,
         [raiseId, roomId, req.user.id, req.user.name]
       );
+      actualRaiseId = row.id;
     });
 
     res.json({
       ok: true,
       handRaise: {
-        id: raiseId,
+        id: actualRaiseId,
         roomId,
         userId: req.user.id,
         userName: req.user.name,
@@ -716,6 +732,9 @@ router.post('/:roomId/lower-hand', async (req, res) => {
   try {
     const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = $1', [roomId]);
     if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    const memberCheck = await isMember(roomId, req.user.id);
+    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
 
     const isHost = room.owner_id === req.user.id;
     const userToLower = (targetUserId && isHost) ? targetUserId : req.user.id;
@@ -861,6 +880,9 @@ router.post('/:roomId/polls/:pollId/close', async (req, res) => {
       return res.status(403).json({ error: 'Only the room host can close polls' });
     }
 
+    const poll = await db.queryGet("SELECT id FROM polls WHERE id = $1 AND room_id = $2", [pollId, roomId]);
+    if (!poll) return res.status(404).json({ error: 'Poll not found' });
+
     await db.queryRun("UPDATE polls SET status = 'closed' WHERE id = $1 AND room_id = $2", [pollId, roomId]);
     res.json({ ok: true, pollId, status: 'closed' });
   } catch (err) {
@@ -1004,12 +1026,14 @@ router.get('/:roomId/whiteboard', async (req, res) => {
   }
 });
 
-// Clear Whiteboard Canvas
+// Clear Whiteboard Canvas (Host Only)
 router.delete('/:roomId/whiteboard', async (req, res) => {
   const { roomId } = req.params;
   try {
-    const memberCheck = await isMember(roomId, req.user.id);
-    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = $1', [roomId]);
+    if (!room || room.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the room host can clear the whiteboard' });
+    }
 
     await db.queryRun('DELETE FROM whiteboard_strokes WHERE room_id = $1', [roomId]);
     res.json({ ok: true, message: 'Whiteboard canvas cleared' });
@@ -1027,15 +1051,20 @@ router.delete('/:roomId/whiteboard', async (req, res) => {
 router.post('/:roomId/invite-link', async (req, res) => {
   const { roomId } = req.params;
   try {
-    const memberCheck = await isMember(roomId, req.user.id);
-    if (!memberCheck) return res.status(403).json({ error: 'Access denied' });
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = $1', [roomId]);
+    if (!room || room.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the room owner can generate guest links' });
+    }
 
-    let link = await db.queryGet('SELECT token FROM invite_links WHERE room_id = $1', [roomId]);
+    // Check for existing valid link
+    let link = await db.queryGet('SELECT token, expires_at FROM invite_links WHERE room_id = $1 AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)', [roomId]);
+    
     if (!link) {
       const token = randomUUID().replace(/-/g, '').slice(0, 16);
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h expiry
       await db.queryRun(
-        'INSERT INTO invite_links (id, room_id, token, created_by) VALUES ($1, $2, $3, $4)',
-        [randomUUID(), roomId, token, req.user.id]
+        'INSERT INTO invite_links (id, room_id, token, created_by, expires_at) VALUES ($1, $2, $3, $4, $5)',
+        [randomUUID(), roomId, token, req.user.id, expiresAt]
       );
       link = { token };
     }
@@ -1044,6 +1073,23 @@ router.post('/:roomId/invite-link', async (req, res) => {
   } catch (err) {
     console.error('Generate invite link failed:', err);
     res.status(500).json({ error: 'Failed to create invite link' });
+  }
+});
+
+// Revoke Shareable Invite Link
+router.delete('/:roomId/invite-link', async (req, res) => {
+  const { roomId } = req.params;
+  try {
+    const room = await db.queryGet('SELECT owner_id FROM rooms WHERE id = $1', [roomId]);
+    if (!room || room.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the room owner can revoke guest links' });
+    }
+
+    await db.queryRun('DELETE FROM invite_links WHERE room_id = $1', [roomId]);
+    res.json({ ok: true, message: 'Invite link revoked' });
+  } catch (err) {
+    console.error('Revoke invite link failed:', err);
+    res.status(500).json({ error: 'Failed to revoke invite link' });
   }
 });
 

@@ -43,17 +43,17 @@ async function request(endpoint, options = {}, isRetry = false) {
             isRefreshing = false;
             onRefreshed(refreshData.token);
           } else {
-            isRefreshing = false;
             onRefreshed(null); // Reject pending subscribers
             localStorage.removeItem('omnicall_token');
             localStorage.removeItem('omnicall_refresh_token');
             localStorage.removeItem('omnicall_user');
             window.location.reload();
+            // Intentionally not setting isRefreshing = false to prevent race condition before reload finishes
             throw new Error('Session expired. Please log in again.');
           }
         } catch (err) {
-          isRefreshing = false;
           onRefreshed(null); // Reject pending subscribers
+          // Intentionally not setting isRefreshing = false to prevent race condition before reload finishes
           throw err;
         }
       }
@@ -185,10 +185,15 @@ export const api = {
       body: JSON.stringify({ displayName }),
     }),
 
-  getRoomMessages: (token, roomId) =>
-    request(`/api/rooms/${roomId}/messages`, {
+  getRoomMessages: (token, roomId, before, beforeId) => {
+    let url = `/api/rooms/${roomId}/messages`;
+    if (before && beforeId) {
+      url += `?before=${encodeURIComponent(before)}&beforeId=${encodeURIComponent(beforeId)}`;
+    }
+    return request(url, {
       headers: { Authorization: `Bearer ${token}` },
-    }),
+    });
+  },
 
   sendRoomMessage: (token, roomId, id, text, attachmentUrl) =>
     request(`/api/rooms/${roomId}/messages`, {
@@ -306,6 +311,12 @@ export const api = {
   getInviteLink: (token, roomId) =>
     request(`/api/rooms/${roomId}/invite-link`, {
       method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  revokeInviteLink: (token, roomId) =>
+    request(`/api/rooms/${roomId}/invite-link`, {
+      method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     }),
 

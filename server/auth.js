@@ -176,13 +176,26 @@ router.post('/send-otp', async (req, res) => {
       message: 'Verification code sent to your email.',
       expiresInMinutes: 10,
       devMode: emailResult.devMode || false,
-      devOtp: emailResult.devMode ? otpCode : undefined, // Provided in dev mode when SMTP not configured
+      devOtp: (emailResult.devMode && process.env.NODE_ENV !== 'production') ? otpCode : undefined,
     });
   } catch (err) {
     console.error('Send OTP failed:', err);
     res.status(500).json({ error: 'Failed to send verification code' });
   }
 });
+
+// Helper to generate a unique username
+async function generateUniqueUsername(requestedUsername, email) {
+  let baseUsername = (requestedUsername && requestedUsername.trim()) ? requestedUsername.trim().toLowerCase() : email.split('@')[0];
+  let assignedUsername = baseUsername;
+  
+  for (let i = 0; i < 3; i++) {
+    const usernameTaken = await db.queryGet('SELECT id FROM users WHERE LOWER(username) = $1', [assignedUsername]);
+    if (!usernameTaken) return assignedUsername;
+    assignedUsername = `${baseUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
+  }
+  return assignedUsername; // If all 3 collide (extremely rare), the DB unique constraint will catch it
+}
 
 // ─── Step 2: Verify OTP and Complete Registration ───────────────────────────
 router.post('/verify-otp-register', async (req, res) => {
@@ -227,11 +240,7 @@ router.post('/verify-otp-register', async (req, res) => {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
-    let assignedUsername = (username && username.trim()) ? username.trim().toLowerCase() : normalizedEmail.split('@')[0];
-    const usernameTaken = await db.queryGet('SELECT id FROM users WHERE LOWER(username) = $1', [assignedUsername]);
-    if (usernameTaken) {
-      assignedUsername = `${assignedUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
-    }
+    const assignedUsername = await generateUniqueUsername(username, normalizedEmail);
 
     const assignedRole = normalizedEmail === ADMIN_EMAIL ? 'admin' : 'user';
     const passwordHash = await bcrypt.hash(password, 12);
@@ -280,11 +289,7 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
-    let assignedUsername = (username && username.trim()) ? username.trim().toLowerCase() : normalizedEmail.split('@')[0];
-    const usernameTaken = await db.queryGet('SELECT id FROM users WHERE LOWER(username) = $1', [assignedUsername]);
-    if (usernameTaken) {
-      assignedUsername = `${assignedUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
-    }
+    const assignedUsername = await generateUniqueUsername(username, normalizedEmail);
 
     const assignedRole = normalizedEmail === ADMIN_EMAIL ? 'admin' : 'user';
 
@@ -351,9 +356,11 @@ router.post('/refresh', async (req, res) => {
 
   try {
     const payload = jwt.verify(refreshToken, getSecret());
-    const isRevoked = await redis.sismember('revoked_users', payload.sub);
-    if (payload.type !== 'refresh' || !payload.sub || isRevoked) {
-      return res.status(401).json({ error: 'Invalid or revoked refresh token' });
+    const isRevoked = await redis.get(`revoked_user:${payload.sub}`);
+    const isTokenUsed = await redis.get(`used_token:${refreshToken}`);
+    
+    if (payload.type !== 'refresh' || !payload.sub || isRevoked || isTokenUsed) {
+      return res.status(401).json({ error: 'Invalid, used, or revoked refresh token' });
     }
 
     const userRow = await db.queryGet('SELECT id, email, name, username, role FROM users WHERE id = $1', [payload.sub]);
@@ -373,6 +380,9 @@ router.post('/refresh', async (req, res) => {
     const newRefreshToken = signRefreshToken(user);
     const bootstrap = await fetchUserBootstrapData(user.id);
 
+    // Blocklist the old refresh token to prevent reuse (ttl: 7 days)
+    await redis.set(`used_token:${refreshToken}`, '1', 'EX', 7 * 24 * 60 * 60);
+
     res.json({ token: newAccessToken, refreshToken: newRefreshToken, user, bootstrap });
   } catch {
     return res.status(401).json({ error: 'Expired or invalid refresh token' });
@@ -389,7 +399,7 @@ export async function requireAuth(req, res, next) {
 
   try {
     const payload = jwt.verify(token, getSecret());
-    const isRevoked = await redis.sismember('revoked_users', payload.sub);
+    const isRevoked = await redis.get(`revoked_user:${payload.sub}`);
     if (isRevoked) {
       return res.status(401).json({ error: 'Session has been revoked or account deleted.' });
     }
@@ -543,8 +553,7 @@ router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res) => {
     });
 
     // Ban the user for 7 days (length of refresh token)
-    await redis.sadd('revoked_users', userId);
-    await redis.expire('revoked_users', 7 * 24 * 60 * 60);
+    await redis.set(`revoked_user:${userId}`, '1', 'EX', 7 * 24 * 60 * 60);
 
     invalidateUsersCache();
 
