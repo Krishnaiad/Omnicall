@@ -239,7 +239,15 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
     }
     const livekitUrl = rawUrl;
 
-    const room = new Room({ adaptiveStream: true, dynacast: true });
+    const room = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      audioCaptureDefaults: {
+        autoGainControl: true,
+        echoCancellation: true,
+        noiseSuppression: true,
+      }
+    });
     roomRef.current = room;
 
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
@@ -914,7 +922,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
   };
 
   const videoTracks = tracks.filter((t) => t.kind === Track.Kind.Video);
-  const audioTracks = tracks.filter((t) => t.kind === Track.Kind.Audio);
+  const audioTracks = tracks.filter((t) => t.kind === Track.Kind.Audio && !t.isLocal);
   const isPresenter = sharedMedia && sharedMedia.presenterName === displayName;
 
   const pinnedTrack = videoTracks.find((t) => t.sid === pinnedTrackSid);
