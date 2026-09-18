@@ -36,14 +36,17 @@ export default function InCallInviteModal({ token, roomId, roomName, onClose }) 
 
   const handleSearch = async (e) => {
     e.preventDefault();
-    if (!query.trim()) return;
+    if (!query.trim()) {
+      setError('Input correct name or email');
+      return;
+    }
     setSearching(true);
     setError(null);
     try {
       const data = await api.searchUsers(token, query.trim());
       setSearchResults(data.users || []);
       if (data.users.length === 0) {
-        setError(`No users found matching "${query.trim()}".`);
+        setError('Input correct name or email');
       }
     } catch (err) {
       setError(err.message);

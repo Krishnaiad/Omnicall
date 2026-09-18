@@ -386,7 +386,7 @@ router.post('/:roomId/invite', async (req, res) => {
     );
 
     if (!invitee) {
-      return res.status(404).json({ error: `No user found matching "${searchTerm}". Please check the username/email.` });
+      return res.status(404).json({ error: 'Input correct name or email' });
     }
 
     const existingMember = await db.queryGet('SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2', [roomId, invitee.id]);

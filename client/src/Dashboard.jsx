@@ -377,7 +377,10 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
   const handleInvite = async (roomId) => {
     const identifier = (inviteEmail[roomId] || '').trim();
-    if (!identifier) return;
+    if (!identifier) {
+      setError('Input correct name or email');
+      return;
+    }
     setError('');
     setSuccess('');
     try {
