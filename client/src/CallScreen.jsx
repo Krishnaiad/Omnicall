@@ -655,7 +655,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
 
   const handleSharePresentation = (mediaUrl, mediaName, mediaType, isLocalPreview = false) => {
-    const mediaObj = { mediaUrl, mediaName, mediaType, presenterName: displayName, isLocalPreview };
+    const mediaObj = { mediaUrl, mediaName, mediaType, presenterName: displayName, presenterId: String(user.id), isLocalPreview };
     
     // Always update the presenter's own view immediately
     setSharedMedia(mediaObj);
@@ -854,7 +854,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
       }
 
       setIsSharingScreen(true);
-      const mediaObj = { mediaUrl: '', mediaName: 'Screen & Tab Watch Party', mediaType: 'video/screenshare', presenterName: displayName };
+      const mediaObj = { mediaUrl: '', mediaName: 'Screen & Tab Watch Party', mediaType: 'video/screenshare', presenterName: displayName, presenterId: String(user.id) };
       setSharedMedia(mediaObj);
       sendDataPacket({ type: 'PRESENTATION_MEDIA', media: mediaObj }, 'meeting-control');
 
@@ -923,7 +923,7 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
 
   const videoTracks = tracks.filter((t) => t.kind === Track.Kind.Video);
   const audioTracks = tracks.filter((t) => t.kind === Track.Kind.Audio && !t.isLocal);
-  const isPresenter = sharedMedia && sharedMedia.presenterName === displayName;
+  const isPresenter = sharedMedia && (sharedMedia.presenterId === String(user.id) || sharedMedia.presenterName === displayName);
 
   const pinnedTrack = videoTracks.find((t) => t.sid === pinnedTrackSid);
   const unpinnedVideoTracks = videoTracks.filter((t) => t.trackName !== 'screen-share' && t.sid !== pinnedTrackSid);
@@ -993,13 +993,13 @@ export default function CallScreen({ token, user, roomData, roomToken, initialDi
             onStopPresentation={handleStopPresentation}
             presenterTrack={
               sharedMedia
-                ? (videoTracks.find((t) => (t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName) && t.kind === 'video' && t.trackName !== 'screen-share')?.track
-                   || videoTracks.find((t) => (t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName) && t.kind === 'video' && t.trackName !== 'screen-share'))
+                ? (videoTracks.find((t) => (t.identity === sharedMedia.presenterId || t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName) && t.kind === 'video' && t.trackName !== 'screen-share')?.track
+                   || videoTracks.find((t) => (t.identity === sharedMedia.presenterId || t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName) && t.kind === 'video' && t.trackName !== 'screen-share'))
                 : null
             }
             screenTrack={
               sharedMedia && sharedMedia.mediaType === 'video/screenshare'
-                ? videoTracks.find((t) => t.trackName === 'screen-share' && (t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName))?.track
+                ? videoTracks.find((t) => t.trackName === 'screen-share' && (t.identity === sharedMedia.presenterId || t.name === sharedMedia.presenterName || t.identity === sharedMedia.presenterName))?.track
                 : null
             }
             dataSaverMode={dataSaverMode}
