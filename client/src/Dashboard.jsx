@@ -972,6 +972,14 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                   </div>
                 </div>
 
+                <div style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', padding: '14px 16px', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live Connections</div>
+                  <div style={{ fontSize: '1.4rem', color: 'var(--success)', fontWeight: 600, marginTop: '4px' }}>
+                    <Activity size={18} style={{ marginRight: '6px', verticalAlign: 'middle', marginBottom: '4px' }} />
+                    {healthMetrics.activeConnections || 0}
+                  </div>
+                </div>
+
                 {healthMetrics.dbPool && (
                   <div style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', padding: '14px 16px', borderRadius: '10px' }}>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Postgres pool</div>

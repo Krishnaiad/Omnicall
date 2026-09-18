@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth, requireAdmin } from './auth.js';
 import { db } from './db.js';
 import { metricsStore } from './logger.js';
+import { getConnectionCount } from './notifications.js';
 
 const router = Router();
 
@@ -23,6 +24,7 @@ router.get('/health-metrics', requireAuth, requireAdmin, async (req, res) => {
       uptime: process.uptime(),
       metrics: metricsStore,
       dbPool: poolStats,
+      activeConnections: getConnectionCount(),
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
