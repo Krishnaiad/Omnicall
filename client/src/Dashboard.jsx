@@ -31,13 +31,15 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
   const [uploading, setUploading] = useState(false);
 
 
-  // Target Mockup Navigation & Modal States
+  // Navigation & Modal States
   const [activeTab, setActiveTab] = useState('rooms');
+  const [showStartMeetingModal, setShowStartMeetingModal] = useState(false);
+  const [meetingRoomName, setMeetingRoomName] = useState('');
+  const [meetingNickname, setMeetingNickname] = useState(user?.name || '');
+  const [startingMeeting, setStartingMeeting] = useState(false);
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
   const [showJoinRoomModal, setShowJoinRoomModal] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
-  const [startingInstantMeeting, setStartingInstantMeeting] = useState(false);
-  const [joinRoomInput, setJoinRoomInput] = useState('');
   const [showInviteForRoomId, setShowInviteForRoomId] = useState(null);
   const userDropdownRef = useRef(null);
 
@@ -381,29 +383,34 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
     }
   };
 
-  const AVATAR_PALETTES = [
-    { bg: 'linear-gradient(135deg, #3B82F6, #1D4ED8)', text: 'JD' },
-    { bg: 'linear-gradient(135deg, #8B5CF6, #6D28D9)', text: 'SK' },
-    { bg: 'linear-gradient(135deg, #EC4899, #BE185D)', text: 'AL' },
-    { bg: 'linear-gradient(135deg, #10B981, #047857)', text: 'MR' },
-    { bg: 'linear-gradient(135deg, #F59E0B, #B45309)', text: 'TC' },
-  ];
+  const handleOpenStartMeeting = () => {
+    setMeetingRoomName('');
+    setMeetingNickname(user?.name || '');
+    setShowStartMeetingModal(true);
+  };
 
-  const handleStartInstantMeeting = async () => {
-    setStartingInstantMeeting(true);
+  const handleStartMeetingSubmit = async (e) => {
+    e.preventDefault();
+    const trimmedRoom = meetingRoomName.trim();
+    const trimmedNick = meetingNickname.trim() || user?.name || 'User';
+    if (!trimmedRoom) return;
+
+    setStartingMeeting(true);
     setError('');
     setSuccess('');
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const roomName = `Room-${randomSuffix}`;
     try {
-      const created = await api.createRoom(token, roomName);
-      setSuccess(`Created instant room "${roomName}"!`);
-      await fetchRooms();
-      await onJoinCall({ id: created.id, name: created.name }, user?.name || 'Host');
+      let targetRoom = rooms.find((r) => r.name.toLowerCase() === trimmedRoom.toLowerCase());
+      if (!targetRoom) {
+        targetRoom = await api.createRoom(token, trimmedRoom);
+        await fetchRooms();
+      }
+      setShowStartMeetingModal(false);
+      setMeetingRoomName('');
+      await onJoinCall(targetRoom, trimmedNick);
     } catch (err) {
-      setError(`Could not start instant meeting: ${err.message}`);
+      setError(`Could not start meeting: ${err.message}`);
     } finally {
-      setStartingInstantMeeting(false);
+      setStartingMeeting(false);
     }
   };
 
@@ -623,18 +630,11 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
         <button
           className="hero-start-btn"
-          onClick={handleStartInstantMeeting}
-          disabled={startingInstantMeeting}
-          title="Start an instant meeting"
+          onClick={handleOpenStartMeeting}
+          title="Start a Meeting"
         >
-          {startingInstantMeeting ? (
-            <>
-              <div className="spin" style={{ width: '18px', height: '18px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#ffffff', borderRadius: '50%' }} />
-              <span>Starting Meeting...</span>
-            </>
-          ) : (
-            <span>Start a Meeting</span>
-          )}
+          <Video size={18} />
+          <span>Start a Meeting</span>
         </button>
 
         <div className="hero-cards-row">
@@ -727,43 +727,63 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
             </div>
           ) : (
             <div className="rooms-glow-grid">
-              {rooms.map((room, index) => {
-                const participantCount = room.active_count > 0 ? room.active_count : 0;
+              {rooms.map((room) => {
+                const participantCount = Number(room.active_count) || 0;
                 const isInviteOpen = showInviteForRoomId === room.id;
+                const realParticipants = Array.isArray(room.active_participants) ? room.active_participants : [];
+
                 return (
                   <div key={room.id} className="room-glow-card">
                     <div>
                       <div className="room-card-header">
                         <span className="room-card-title" title={room.name}>{room.name}</span>
-                        <span className="room-card-badge">
-                          <Users size={12} /> {participantCount > 0 ? participantCount : (room.role === 'owner' ? 'Owner' : 'Member')}
+                        <span className="badge" style={{ textTransform: 'capitalize' }}>
+                          {room.role}
                         </span>
                       </div>
-                      <div className="room-card-subtitle">
-                        {participantCount > 0 ? `${participantCount} live video participants` : 'Video participants'}
-                      </div>
 
-                      {/* Mockup Overlapping Participant Avatars */}
-                      <div className="room-avatars-row">
-                        {AVATAR_PALETTES.slice(0, Math.min(3, Math.max(1, participantCount || ((index % 3) + 2)))).map((av, idx) => (
-                          <div
-                            key={idx}
-                            className="avatar-stack-item"
-                            style={{ background: av.bg }}
-                            title="Active participant"
-                          >
-                            {av.text}
-                          </div>
-                        ))}
-                        {participantCount > 3 && (
-                          <div
-                            className="avatar-stack-item"
-                            style={{ background: 'rgba(59, 130, 246, 0.25)', color: '#93c5fd', fontSize: '0.65rem' }}
-                          >
-                            +{participantCount - 3}
-                          </div>
+                      {/* Real live participant status */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '8px 0 14px 0' }}>
+                        {participantCount > 0 ? (
+                          <>
+                            <span className="live-dot" title={`${participantCount} live`} />
+                            <span className="badge" style={{ color: 'var(--success)', background: 'var(--success-bg)', border: '1px solid rgba(22,163,74,0.2)' }}>
+                              {participantCount} live
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--text-muted)', display: 'inline-block' }} title="No one in room" />
+                            <span className="badge" style={{ color: 'var(--text-secondary)', background: 'var(--surface-raised)', border: '1px solid var(--border)', fontSize: '0.7rem' }}>
+                              No one in room
+                            </span>
+                          </>
                         )}
                       </div>
+
+                      {/* ONLY show avatar bubbles if people are ACTUALLY present */}
+                      {realParticipants.length > 0 && (
+                        <div className="room-avatars-row">
+                          {realParticipants.slice(0, 4).map((p, idx) => (
+                            <div
+                              key={idx}
+                              className="avatar-stack-item"
+                              style={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)' }}
+                              title={p.name || 'Participant'}
+                            >
+                              {(p.name || 'U').slice(0, 2).toUpperCase()}
+                            </div>
+                          ))}
+                          {realParticipants.length > 4 && (
+                            <div
+                              className="avatar-stack-item"
+                              style={{ background: 'rgba(59, 130, 246, 0.25)', color: '#93c5fd', fontSize: '0.65rem' }}
+                            >
+                              +{realParticipants.length - 4}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -837,30 +857,6 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               })}
             </div>
           )}
-
-          {/* Bottom Participant Ribbon Bar (Matches Mockup) */}
-          <div className="participants-ribbon-bar">
-            <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500, marginRight: '4px' }}>Active Network:</span>
-            <div style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', padding: '2px 0' }}>
-              {AVATAR_PALETTES.concat(AVATAR_PALETTES).map((av, idx) => (
-                <div
-                  key={idx}
-                  className="avatar-stack-item"
-                  style={{
-                    background: av.bg,
-                    width: '32px',
-                    height: '32px',
-                    fontSize: '0.75rem',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.6)',
-                    cursor: 'pointer'
-                  }}
-                  title={`Participant ${av.text}`}
-                >
-                  {av.text}
-                </div>
-              ))}
-            </div>
-          </div>
         </section>
       )}
 
@@ -1181,6 +1177,63 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ─── Start a Meeting Modal ─── */}
+      {showStartMeetingModal && (
+        <div className="modal-backdrop" onClick={() => setShowStartMeetingModal(false)}>
+          <div className="glass-card modal-box" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.15rem', color: '#ffffff' }}>
+                <Video size={18} color="#3b82f6" /> Start a Meeting
+              </div>
+              <button onClick={() => setShowStartMeetingModal(false)} className="btn-ghost" style={{ padding: '4px' }}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleStartMeetingSubmit}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '0.8125rem', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                  Room Name
+                </label>
+                <input
+                  className="form-control"
+                  placeholder="Enter room name..."
+                  value={meetingRoomName}
+                  onChange={(e) => setMeetingRoomName(e.target.value)}
+                  maxLength={80}
+                  required
+                  autoFocus
+                  style={{ borderRadius: '10px' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ fontSize: '0.8125rem', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                  Display Name in Call
+                </label>
+                <input
+                  className="form-control"
+                  placeholder="Your display name..."
+                  value={meetingNickname}
+                  onChange={(e) => setMeetingNickname(e.target.value)}
+                  maxLength={50}
+                  required
+                  style={{ borderRadius: '10px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="button" className="btn-outline" onClick={() => setShowStartMeetingModal(false)} style={{ flex: 1, borderRadius: '8px' }}>
+                  Cancel
+                </button>
+                <button type="submit" className="hero-start-btn" disabled={startingMeeting} style={{ flex: 1, padding: '10px', fontSize: '0.9rem', justifyContent: 'center' }}>
+                  {startingMeeting ? 'Joining...' : 'Start & Join Call'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

@@ -223,7 +223,9 @@ router.get('/', async (req, res) => {
   try {
     const rooms = await db.queryAll(
       `SELECT rooms.id, rooms.name, rooms.owner_id, room_members.role, rooms.created_at,
-        (SELECT COUNT(*)::int FROM live_sessions WHERE (room_id = rooms.id OR room_name = rooms.name) AND left_at IS NULL) AS active_count
+        (SELECT COUNT(*)::int FROM live_sessions WHERE (room_id = rooms.id OR room_name = rooms.name) AND left_at IS NULL) AS active_count,
+        (SELECT COALESCE(json_agg(json_build_object('identity', participant_identity, 'name', participant_name)), '[]'::json)
+         FROM live_sessions WHERE (room_id = rooms.id OR room_name = rooms.name) AND left_at IS NULL) AS active_participants
        FROM rooms
        JOIN room_members ON room_members.room_id = rooms.id
        WHERE room_members.user_id = $1
