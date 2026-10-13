@@ -31,6 +31,26 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
   const [uploading, setUploading] = useState(false);
 
 
+  // Target Mockup Navigation & Modal States
+  const [activeTab, setActiveTab] = useState('rooms');
+  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [showJoinRoomModal, setShowJoinRoomModal] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [startingInstantMeeting, setStartingInstantMeeting] = useState(false);
+  const [joinRoomInput, setJoinRoomInput] = useState('');
+  const [showInviteForRoomId, setShowInviteForRoomId] = useState(null);
+  const userDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target)) {
+        setShowUserDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
   // Real-time Invite Notice Banner
   const [inviteNotice, setInviteNotice] = useState(null);
 
@@ -361,9 +381,34 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
     }
   };
 
-  const handleCreateRoom = async (e) => {
+  const AVATAR_PALETTES = [
+    { bg: 'linear-gradient(135deg, #3B82F6, #1D4ED8)', text: 'JD' },
+    { bg: 'linear-gradient(135deg, #8B5CF6, #6D28D9)', text: 'SK' },
+    { bg: 'linear-gradient(135deg, #EC4899, #BE185D)', text: 'AL' },
+    { bg: 'linear-gradient(135deg, #10B981, #047857)', text: 'MR' },
+    { bg: 'linear-gradient(135deg, #F59E0B, #B45309)', text: 'TC' },
+  ];
 
-    e.preventDefault();
+  const handleStartInstantMeeting = async () => {
+    setStartingInstantMeeting(true);
+    setError('');
+    setSuccess('');
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const roomName = `Room-${randomSuffix}`;
+    try {
+      const created = await api.createRoom(token, roomName);
+      setSuccess(`Created instant room "${roomName}"!`);
+      await fetchRooms();
+      await onJoinCall({ id: created.id, name: created.name }, user?.name || 'Host');
+    } catch (err) {
+      setError(`Could not start instant meeting: ${err.message}`);
+    } finally {
+      setStartingInstantMeeting(false);
+    }
+  };
+
+  const handleCreateRoom = async (e) => {
+    if (e) e.preventDefault();
     if (!newRoomName.trim()) return;
     setError('');
     setSuccess('');
@@ -447,118 +492,115 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
   return (
 
     <div className="dashboard-layout">
-      {/* Top Responsive Navbar */}
-      <nav className="dashboard-nav glass-card">
-        {/* Left Side: Brand Logo & Status */}
+      {/* Top Responsive Navbar (Target Mockup Style) */}
+      <nav className="dashboard-nav">
+        {/* Left Side: Glowing Blue Dot & Brand Title */}
         <div className="brand-header-box">
-          <div style={{ background: 'var(--accent-bg)', color: 'var(--accent)', border: '0.5px solid var(--border)', padding: '10px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Video size={22} />
-          </div>
-          <div>
-            <div className="brand-title">OmniCall Workspace</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-              <span className="live-dot" style={{ width: '6px', height: '6px' }} /> Real-time WebRTC platform
-            </div>
-          </div>
+          <span className="brand-glow-dot" />
+          <span className="brand-title">OmniCall</span>
         </div>
 
-        {/* Right Side: Cleanly Aligned Actions Toolbar (No floating center buttons) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {isAdmin && (
-            <button
-              className="admin-directory-btn"
-              onClick={handleOpenAdminDirectory}
-              title="Open User Directory (Admin only)"
-            >
-              <Users size={16} />
-              <span>User directory</span>
-            </button>
-          )}
-
+        {/* Right Side: Clean Profile Avatar with Dropdown Menu */}
+        <div className="user-dropdown-container" ref={userDropdownRef}>
           <button
-            type="button"
-            className="theme-toggle-btn"
-            onClick={toggleTheme}
-            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
-            aria-label="Toggle dark/light theme"
-          >
-            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
-
-          <div style={{ width: '1px', height: '22px', background: 'var(--border-strong)', margin: '0 2px' }} />
-
-          {/* Profile Pill Button (Sleek single-line layout, round avatar) */}
-          <button
-            className="user-profile-btn"
-            onClick={handleOpenProfileModal}
+            className="user-avatar-nav-btn"
+            onClick={() => setShowUserDropdown((prev) => !prev)}
             title="Account profile & settings"
+            aria-label="Account profile & settings"
           >
-            <div className="avatar-circle" style={{ width: '28px', height: '28px', fontSize: '0.75rem', fontWeight: 600, background: 'var(--accent)', color: '#ffffff', border: 'none' }}>
+            <div className="avatar-circle-nav">
               {(user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
             </div>
-            <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-              {user?.name || `@${user?.username || 'user'}`}
-            </span>
-            {isAdmin && (
-              <span className="neutral-badge" style={{ fontSize: '0.65rem', padding: '1px 6px', background: 'var(--accent-bg)', color: 'var(--accent)', borderColor: 'transparent', fontWeight: 600 }}>
-                Admin
-              </span>
-            )}
           </button>
 
-          <button
-            className="btn-outline"
-            onClick={onLogout}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', minHeight: '38px', padding: '6px 12px', fontSize: '0.85rem' }}
-            title="Logout of OmniCall"
-          >
-            <LogOut size={15} />
-            <span>Logout</span>
-          </button>
+          {showUserDropdown && (
+            <div className="user-nav-dropdown">
+              <div className="user-dropdown-header">
+                <div className="avatar-circle-nav" style={{ width: '38px', height: '38px', fontSize: '0.85rem' }}>
+                  {(user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
+                </div>
+                <div style={{ overflow: 'hidden', minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, color: '#ffffff', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user?.name || `@${user?.username}`}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                    @{user?.username || 'user'} {isAdmin && <span className="neutral-badge" style={{ marginLeft: '4px', fontSize: '0.65rem' }}>Admin</span>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="dropdown-divider" />
+
+              <button
+                className="dropdown-item-btn"
+                onClick={() => {
+                  setShowUserDropdown(false);
+                  setShowProfileModal(true);
+                }}
+              >
+                <Edit3 size={15} color="#3b82f6" />
+                <span>Account Profile</span>
+              </button>
+
+              {isAdmin && (
+                <button
+                  className="dropdown-item-btn"
+                  onClick={() => {
+                    setShowUserDropdown(false);
+                    setShowAdminDirectory(true);
+                  }}
+                >
+                  <Shield size={15} color="#3b82f6" />
+                  <span>User Directory</span>
+                </button>
+              )}
+
+              {isAdmin && (
+                <button
+                  className="dropdown-item-btn"
+                  onClick={() => {
+                    setShowUserDropdown(false);
+                    setActiveTab('health');
+                    fetchHealthMetrics();
+                  }}
+                >
+                  <Activity size={15} color="#3b82f6" />
+                  <span>System Health</span>
+                </button>
+              )}
+
+              <button
+                className="dropdown-item-btn"
+                onClick={() => {
+                  toggleTheme();
+                }}
+              >
+                {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+                <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+              </button>
+
+              <div className="dropdown-divider" />
+
+              <button
+                className="dropdown-item-btn logout"
+                onClick={() => {
+                  setShowUserDropdown(false);
+                  onLogout();
+                }}
+              >
+                <LogOut size={15} />
+                <span>Logout</span>
+              </button>
+            </div>
+          )}
         </div>
       </nav>
-
-      {/* Quick Stat Cards */}
-      <div className="dash-stats">
-        <div className="stat-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Active rooms</span>
-            <div className="stat-icon-box">
-              <Video size={16} />
-            </div>
-          </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>{rooms.length}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Ready for video calls</div>
-        </div>
-
-        <div className="stat-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Media clips</span>
-            <div className="stat-icon-box" style={{ color: '#8B5CF6', background: 'rgba(139,92,246,0.1)' }}>
-              <Film size={16} />
-            </div>
-          </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>{clips.length}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Streamable files</div>
-        </div>
-
-        <div className="stat-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Room memories</span>
-            <div className="stat-icon-box" style={{ color: '#F59E0B', background: 'rgba(245,158,11,0.1)' }}>
-              <Camera size={16} />
-            </div>
-          </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>{memories.length}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Saved call snapshots</div>
-        </div>
-      </div>
 
       {/* Floating Notifications Toast Container */}
       {(inviteNotice || error || success) && (
         <div style={{ position: 'fixed', top: '24px', right: '24px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '400px', width: 'calc(100% - 48px)' }}>
           {inviteNotice && (
-            <div className="glass-card" style={{ padding: '12px 16px', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.95), rgba(236, 72, 153, 0.95))', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)' }}>
+            <div className="glass-card" style={{ padding: '12px 16px', background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95))', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)' }}>
               <Bell size={18} /> <span>{inviteNotice}</span>
             </div>
           )}
@@ -575,141 +617,256 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         </div>
       )}
 
+      {/* ─── Hero Meeting Action Center (Mockup Target) ─── */}
+      <section className="hero-meeting-section">
+        <div className="hero-glow-bloom" />
 
-      {/* Main Grid: Video Rooms + Media Injector */}
-      <div className="dash-sections">
-        {/* Video Rooms Box */}
-        <div className="glass-card section-box">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-              <Video size={20} color="var(--text-muted)" /> Your video rooms
-            </div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Unique names enforced</span>
+        <button
+          className="hero-start-btn"
+          onClick={handleStartInstantMeeting}
+          disabled={startingInstantMeeting}
+          title="Start an instant meeting"
+        >
+          {startingInstantMeeting ? (
+            <>
+              <div className="spin" style={{ width: '18px', height: '18px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#ffffff', borderRadius: '50%' }} />
+              <span>Starting Meeting...</span>
+            </>
+          ) : (
+            <span>Start a Meeting</span>
+          )}
+        </button>
+
+        <div className="hero-cards-row">
+          <div
+            className="hero-action-card"
+            onClick={() => setShowCreateRoomModal(true)}
+            role="button"
+            tabIndex={0}
+          >
+            <div className="hero-card-title">Create Room</div>
+            <div className="hero-card-desc">Create a room in extremely border glows effect</div>
           </div>
 
-          <form onSubmit={handleCreateRoom} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-            <input
-              className="form-control"
-              placeholder="Create new unique room name..."
-              value={newRoomName}
-              onChange={(e) => setNewRoomName(e.target.value)}
-              maxLength={80}
-              style={{ borderRadius: '10px' }}
-            />
-            <button type="submit" className="btn-primary" style={{ width: 'auto', padding: '0 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
-              <Plus size={18} /> Create
+          <div
+            className="hero-action-card"
+            onClick={() => setShowJoinRoomModal(true)}
+            role="button"
+            tabIndex={0}
+          >
+            <div className="hero-card-title">Join Room</div>
+            <div className="hero-card-desc">Join a frosted glows to premium, fleet</div>
+          </div>
+        </div>
+      </section>
+
+      {/* Navigation Feature Tabs */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '22px' }}>
+        <div className="dash-nav-tabs">
+          <button
+            className={`dash-tab-btn ${activeTab === 'rooms' ? 'active' : ''}`}
+            onClick={() => setActiveTab('rooms')}
+          >
+            <Video size={14} /> Your Rooms ({rooms.length})
+          </button>
+          <button
+            className={`dash-tab-btn ${activeTab === 'media' ? 'active' : ''}`}
+            onClick={() => setActiveTab('media')}
+          >
+            <Film size={14} /> Media Library ({clips.length})
+          </button>
+          <button
+            className={`dash-tab-btn ${activeTab === 'memories' ? 'active' : ''}`}
+            onClick={() => setActiveTab('memories')}
+          >
+            <Camera size={14} /> Room Memories ({memories.length})
+          </button>
+          {isAdmin && (
+            <button
+              className={`dash-tab-btn ${activeTab === 'health' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('health');
+                fetchHealthMetrics();
+              }}
+            >
+              <Activity size={14} /> System Health
             </button>
-          </form>
+          )}
+        </div>
+      </div>
+
+      {/* ─── TAB 1: YOUR ROOMS (Mockup Card Grid) ─── */}
+      {activeTab === 'rooms' && (
+        <section style={{ marginBottom: '36px' }}>
+          <h2 className="section-header-title">Your Rooms</h2>
 
           {loadingRooms ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="rooms-glow-grid">
               {[1, 2, 3].map((n) => (
-                <div key={n} className="room-skeleton-item">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div className="skeleton-shimmer" style={{ width: '10px', height: '10px', borderRadius: '50%' }} />
-                    <div className="skeleton-shimmer" style={{ width: '140px', height: '16px' }} />
-                    <div className="skeleton-shimmer" style={{ width: '60px', height: '20px', borderRadius: '999px' }} />
-                  </div>
-                  <div className="skeleton-shimmer" style={{ width: '80px', height: '32px', borderRadius: '8px' }} />
+                <div key={n} className="room-glow-card">
+                  <div className="skeleton-shimmer" style={{ width: '60%', height: '18px', borderRadius: '4px' }} />
+                  <div className="skeleton-shimmer" style={{ width: '40%', height: '12px', borderRadius: '4px', margin: '14px 0' }} />
+                  <div className="skeleton-shimmer" style={{ width: '100%', height: '36px', borderRadius: '8px' }} />
                 </div>
               ))}
             </div>
           ) : rooms.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '32px 16px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '12px', border: '1px dashed rgba(255, 255, 255, 0.1)' }}>
-              <div style={{ display: 'inline-flex', padding: '14px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '50%', marginBottom: '12px' }}>
-                <Video size={28} color="#818cf8" />
-              </div>
-              <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '4px' }}>No video rooms yet</div>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', maxWidth: '320px', margin: '0 auto' }}>
-                Create your first room above to start a secure, encrypted video conference with instant link sharing!
+            <div style={{ textAlign: 'center', padding: '48px 20px', background: 'rgba(8, 12, 22, 0.5)', borderRadius: '16px', border: '1px dashed rgba(59, 130, 246, 0.2)', marginBottom: '24px' }}>
+              <Video size={36} color="#3b82f6" style={{ margin: '0 auto 14px', opacity: 0.8 }} />
+              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#ffffff', marginBottom: '6px' }}>No video rooms yet</div>
+              <p style={{ color: '#94a3b8', fontSize: '0.85rem', maxWidth: '360px', margin: '0 auto 18px' }}>
+                Create your first room or click "Start a Meeting" above to jump straight into a call!
               </p>
+              <button
+                className="hero-start-btn"
+                style={{ padding: '10px 24px', fontSize: '0.9rem' }}
+                onClick={() => setShowCreateRoomModal(true)}
+              >
+                <Plus size={16} /> Create First Room
+              </button>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {rooms.map((room) => (
-                <div key={room.id} className="room-item">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      {room.active_count > 0 ? (
-                        <>
-                          <span className="live-dot" title={`${room.active_count} participant(s) live`} />
-                          <span className="room-name-text" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{room.name}</span>
-                          <span className="badge" style={{ color: 'var(--success)', background: 'var(--success-bg)', border: '1px solid rgba(22,163,74,0.2)' }}>
-                            {room.active_count} live
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--text-muted)', display: 'inline-block' }} title="No one in room" />
-                          <span className="room-name-text" style={{ fontSize: '0.95rem', fontWeight: 500 }}>{room.name}</span>
-                          <span className="badge" style={{ color: 'var(--text-secondary)', background: 'var(--surface-raised)', border: '1px solid var(--border)', fontSize: '0.7rem' }}>
-                            No one in room
-                          </span>
-                        </>
-                      )}
-                      <span className="badge" style={{ textTransform: 'capitalize' }}>
-                        {room.role}
-                      </span>
+            <div className="rooms-glow-grid">
+              {rooms.map((room, index) => {
+                const participantCount = room.active_count > 0 ? room.active_count : 0;
+                const isInviteOpen = showInviteForRoomId === room.id;
+                return (
+                  <div key={room.id} className="room-glow-card">
+                    <div>
+                      <div className="room-card-header">
+                        <span className="room-card-title" title={room.name}>{room.name}</span>
+                        <span className="room-card-badge">
+                          <Users size={12} /> {participantCount > 0 ? participantCount : (room.role === 'owner' ? 'Owner' : 'Member')}
+                        </span>
+                      </div>
+                      <div className="room-card-subtitle">
+                        {participantCount > 0 ? `${participantCount} live video participants` : 'Video participants'}
+                      </div>
+
+                      {/* Mockup Overlapping Participant Avatars */}
+                      <div className="room-avatars-row">
+                        {AVATAR_PALETTES.slice(0, Math.min(3, Math.max(1, participantCount || ((index % 3) + 2)))).map((av, idx) => (
+                          <div
+                            key={idx}
+                            className="avatar-stack-item"
+                            style={{ background: av.bg }}
+                            title="Active participant"
+                          >
+                            {av.text}
+                          </div>
+                        ))}
+                        {participantCount > 3 && (
+                          <div
+                            className="avatar-stack-item"
+                            style={{ background: 'rgba(59, 130, 246, 0.25)', color: '#93c5fd', fontSize: '0.65rem' }}
+                          >
+                            +{participantCount - 3}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button
-                        className="btn-join"
-                        onClick={() => promptJoin(room)}
-                        onMouseEnter={prefetchCallScreen}
-                        onFocus={prefetchCallScreen}
-                      >
-                        <Video size={14} /> Join call
-                      </button>
-
-                      {room.role === 'owner' ? (
-                        <button
-                          className="btn-delete"
-                          onClick={() => setDeletingRoomTarget(room)}
-                          aria-label="Delete room"
-                          title="Delete room"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      ) : (
-                        <button
-                          className="btn-ghost"
-                          onClick={() => setLeavingRoomTarget(room)}
-                          title="Leave room"
-                          style={{ color: 'var(--warning)' }}
-                        >
-                          <LogOut size={16} />
-                        </button>
+                    <div>
+                      {/* Inline Invite Box if toggled */}
+                      {isInviteOpen && room.role === 'owner' && (
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                          <input
+                            className="form-control"
+                            placeholder="Username or email..."
+                            style={{ fontSize: '0.75rem', padding: '6px 10px', height: '32px' }}
+                            value={inviteEmail[room.id] || ''}
+                            onChange={(e) => setInviteEmail((prev) => ({ ...prev, [room.id]: e.target.value }))}
+                          />
+                          <button
+                            className="btn-primary"
+                            style={{ padding: '4px 10px', fontSize: '0.75rem', height: '32px', width: 'auto' }}
+                            onClick={() => handleInvite(room.id)}
+                          >
+                            Invite
+                          </button>
+                        </div>
                       )}
+
+                      <div className="room-card-actions">
+                        <button
+                          className="btn-join-glow"
+                          onClick={() => promptJoin(room)}
+                          onMouseEnter={prefetchCallScreen}
+                          onFocus={prefetchCallScreen}
+                        >
+                          <Video size={13} /> Join call
+                        </button>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          {room.role === 'owner' && (
+                            <button
+                              className="btn-ghost"
+                              onClick={() => setShowInviteForRoomId(isInviteOpen ? null : room.id)}
+                              title={isInviteOpen ? 'Close invite' : 'Invite participants'}
+                              style={{ padding: '6px', color: isInviteOpen ? '#60a5fa' : '#94a3b8' }}
+                            >
+                              <UserPlus size={15} />
+                            </button>
+                          )}
+
+                          {room.role === 'owner' ? (
+                            <button
+                              className="btn-delete"
+                              onClick={() => setDeletingRoomTarget(room)}
+                              aria-label="Delete room"
+                              title="Delete room"
+                              style={{ padding: '6px' }}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          ) : (
+                            <button
+                              className="btn-ghost"
+                              onClick={() => setLeavingRoomTarget(room)}
+                              title="Leave room"
+                              style={{ color: '#f59e0b', padding: '6px' }}
+                            >
+                              <LogOut size={15} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          )}
 
-                  {room.role === 'owner' && (
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                      <input
-                        className="form-control"
-                        placeholder="Invite user by username or email..."
-                        style={{ fontSize: '0.8125rem' }}
-                        value={inviteEmail[room.id] || ''}
-                        onChange={(e) => setInviteEmail((prev) => ({ ...prev, [room.id]: e.target.value }))}
-                      />
-                      <button
-                        className="btn-outline"
-                        style={{ padding: '6px 12px', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}
-                        onClick={() => handleInvite(room.id)}
-                      >
-                        <UserPlus size={14} /> Invite
-                      </button>
-                    </div>
-                  )}
+          {/* Bottom Participant Ribbon Bar (Matches Mockup) */}
+          <div className="participants-ribbon-bar">
+            <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500, marginRight: '4px' }}>Active Network:</span>
+            <div style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', padding: '2px 0' }}>
+              {AVATAR_PALETTES.concat(AVATAR_PALETTES).map((av, idx) => (
+                <div
+                  key={idx}
+                  className="avatar-stack-item"
+                  style={{
+                    background: av.bg,
+                    width: '32px',
+                    height: '32px',
+                    fontSize: '0.75rem',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.6)',
+                    cursor: 'pointer'
+                  }}
+                  title={`Participant ${av.text}`}
+                >
+                  {av.text}
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        </section>
+      )}
 
-        {/* Server Media Library Box */}
-        <div className="glass-card section-box">
+      {/* ─── TAB 2: MEDIA LIBRARY ─── */}
+      {activeTab === 'media' && (
+        <div className="glass-card section-box" style={{ marginBottom: '32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
               <Film size={20} color="var(--text-muted)" /> Media library
@@ -794,7 +951,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No media uploaded yet.</p>
             </div>
           ) : (
-            <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ maxHeight: '340px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {clips.map((clip) => {
                 const isCloudinary = clip.storageProvider === 'cloudinary';
                 return (
@@ -857,98 +1014,99 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                   </div>
                 );
               })}
-
             </div>
           )}
         </div>
-      </div>
+      )}
 
-      {/* ─── 📸 Room Memories & Snapshots Block ─── */}
-      <div className="glass-card section-box" style={{ marginTop: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-            <Camera size={20} color="var(--text-muted)" /> Room memories & call snapshots
+      {/* ─── TAB 3: ROOM MEMORIES & SNAPSHOTS ─── */}
+      {activeTab === 'memories' && (
+        <div className="glass-card section-box" style={{ marginBottom: '32px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+              <Camera size={20} color="var(--text-muted)" /> Room memories & call snapshots
+            </div>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{memories.length} saved</span>
           </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{memories.length} saved</span>
+
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+            Snapshots and memory pictures captured during video meetings are preserved here.
+          </p>
+
+          {loadingMemories ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
+              {[1, 2, 3, 4].map(n => (
+                <div key={n} className="memory-card" style={{ background: 'var(--surface)' }}>
+                  <div className="skeleton-shimmer" style={{ width: '100%', height: '140px', borderTopLeftRadius: '10px', borderTopRightRadius: '10px' }} />
+                  <div style={{ padding: '12px' }}>
+                    <div className="skeleton-shimmer" style={{ width: '40%', height: '14px', borderRadius: '4px', marginBottom: '8px' }} />
+                    <div className="skeleton-shimmer" style={{ width: '60%', height: '12px', borderRadius: '4px' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : memories.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '28px', background: 'var(--surface)', borderRadius: '12px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+              <Camera size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+              No memories saved yet. When you take a snapshot in a call, click <strong>"Save to Memories"</strong> to preserve the moment here.
+            </div>
+          ) : (
+            <div className="memories-grid">
+              {memories.map((mem) => (
+                <div key={mem.id} className="memory-card">
+                  <img
+                    src={mem.mediaUrl}
+                    alt={mem.caption}
+                    className="memory-img"
+                    onClick={() => setSelectedMemoryView(mem)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <div className="memory-footer">
+                    <div style={{ overflow: 'hidden', marginRight: '8px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {mem.caption || mem.roomName}
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                        {new Date(mem.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <a
+                        href={mem.mediaUrl}
+                        download={`omnicall-memory-${mem.id}.png`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-ghost"
+                        style={{ padding: '6px' }}
+                        aria-label="Download image"
+                        title="Download image"
+                      >
+                        <Download size={14} />
+                      </a>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeletingMemoryTarget(mem);
+                        }}
+                        className="btn-delete"
+                        style={{ padding: '6px' }}
+                        aria-label="Delete memory"
+                        title="Delete memory"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+      )}
 
-        <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-          Snapshots and memory pictures captured during video meetings are preserved here.
-        </p>
-
-        {loadingMemories ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
-            {[1, 2, 3, 4].map(n => (
-              <div key={n} className="memory-card" style={{ background: 'var(--surface)' }}>
-                <div className="skeleton-shimmer" style={{ width: '100%', height: '140px', borderTopLeftRadius: '10px', borderTopRightRadius: '10px' }} />
-                <div style={{ padding: '12px' }}>
-                  <div className="skeleton-shimmer" style={{ width: '40%', height: '14px', borderRadius: '4px', marginBottom: '8px' }} />
-                  <div className="skeleton-shimmer" style={{ width: '60%', height: '12px', borderRadius: '4px' }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : memories.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '28px', background: 'var(--surface)', borderRadius: '12px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-            <Camera size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-            No memories saved yet. When you take a snapshot in a call, click <strong>"Save to Memories"</strong> to preserve the moment here.
-          </div>
-        ) : (
-          <div className="memories-grid">
-            {memories.map((mem) => (
-              <div key={mem.id} className="memory-card">
-                <img
-                  src={mem.mediaUrl}
-                  alt={mem.caption}
-                  className="memory-img"
-                  onClick={() => setSelectedMemoryView(mem)}
-                  style={{ cursor: 'pointer' }}
-                />
-                <div className="memory-footer">
-                  <div style={{ overflow: 'hidden', marginRight: '8px' }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {mem.caption || mem.roomName}
-                    </div>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                      {new Date(mem.createdAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <a
-                      href={mem.mediaUrl}
-                      download={`omnicall-memory-${mem.id}.png`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn-ghost"
-                      style={{ padding: '6px' }}
-                      aria-label="Download image"
-                      title="Download image"
-                    >
-                      <Download size={14} />
-                    </a>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeletingMemoryTarget(mem);
-                      }}
-                      className="btn-delete"
-                      style={{ padding: '6px' }}
-                      aria-label="Delete memory"
-                      title="Delete memory"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ─── 🛡️ System Health & Metrics (Admin Only) ─── */}
-      {isAdmin && (
-        <div className="glass-card section-box" style={{ marginTop: '24px' }}>
+      {/* ─── TAB 4: SYSTEM HEALTH & METRICS (Admin Only) ─── */}
+      {isAdmin && activeTab === 'health' && (
+        <div className="glass-card section-box" style={{ marginBottom: '32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
               <Activity size={20} color="var(--accent)" /> System health & metrics
@@ -1023,6 +1181,107 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ─── Create Room Modal ─── */}
+      {showCreateRoomModal && (
+        <div className="modal-backdrop" onClick={() => setShowCreateRoomModal(false)}>
+          <div className="glass-card modal-box" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.15rem', color: '#ffffff' }}>
+                <Video size={18} color="#3b82f6" /> Create a New Room
+              </div>
+              <button onClick={() => setShowCreateRoomModal(false)} className="btn-ghost" style={{ padding: '4px' }}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={async (e) => {
+              await handleCreateRoom(e);
+              setShowCreateRoomModal(false);
+            }}>
+              <div style={{ marginBottom: '18px' }}>
+                <label style={{ fontSize: '0.8125rem', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                  Room Name
+                </label>
+                <input
+                  className="form-control"
+                  placeholder="e.g. Design Review, Team Sync..."
+                  value={newRoomName}
+                  onChange={(e) => setNewRoomName(e.target.value)}
+                  maxLength={80}
+                  required
+                  autoFocus
+                  style={{ borderRadius: '10px' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="button" className="btn-outline" onClick={() => setShowCreateRoomModal(false)} style={{ flex: 1, borderRadius: '8px' }}>
+                  Cancel
+                </button>
+                <button type="submit" className="hero-start-btn" style={{ flex: 1, padding: '10px', fontSize: '0.9rem', justifyContent: 'center' }}>
+                  <Plus size={16} /> Create Room
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Join Room Modal ─── */}
+      {showJoinRoomModal && (
+        <div className="modal-backdrop" onClick={() => setShowJoinRoomModal(false)}>
+          <div className="glass-card modal-box" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.15rem', color: '#ffffff' }}>
+                <Video size={18} color="#3b82f6" /> Join a Room
+              </div>
+              <button onClick={() => setShowJoinRoomModal(false)} className="btn-ghost" style={{ padding: '4px' }}>
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '0.8125rem', color: '#94a3b8', display: 'block', marginBottom: '8px' }}>
+                Pick from Your Video Rooms:
+              </label>
+              {rooms.length === 0 ? (
+                <p style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '16px' }}>No rooms available. Create one to get started!</p>
+              ) : (
+                <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+                  {rooms.map((r) => (
+                    <div
+                      key={r.id}
+                      onClick={() => {
+                        setShowJoinRoomModal(false);
+                        promptJoin(r);
+                      }}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        background: 'rgba(59, 130, 246, 0.08)',
+                        border: '1px solid rgba(59, 130, 246, 0.2)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 140ms ease'
+                      }}
+                    >
+                      <span style={{ fontWeight: 500, color: '#ffffff', fontSize: '0.9rem' }}>{r.name}</span>
+                      <span className="badge" style={{ color: '#93c5fd', background: 'rgba(59, 130, 246, 0.18)', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                        {r.active_count > 0 ? `${r.active_count} live` : 'Join'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button type="button" className="btn-outline" onClick={() => setShowJoinRoomModal(false)} style={{ width: '100%', borderRadius: '8px' }}>
+              Close
+            </button>
+          </div>
         </div>
       )}
 
