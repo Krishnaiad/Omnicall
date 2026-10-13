@@ -41,7 +41,12 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
   const [showJoinRoomModal, setShowJoinRoomModal] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showInviteForRoomId, setShowInviteForRoomId] = useState(null);
+  const [roomSearchFilter, setRoomSearchFilter] = useState('');
   const userDropdownRef = useRef(null);
+
+  const displayedRooms = rooms.filter((r) =>
+    r.name.toLowerCase().includes(roomSearchFilter.toLowerCase().trim())
+  );
 
   useEffect(() => {
     const handleOutsideClick = (e) => {
@@ -499,107 +504,129 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
   return (
 
     <div className="dashboard-layout">
-      {/* Top Responsive Navbar (Target Mockup Style) */}
+      {/* Top Responsive Navbar */}
       <nav className="dashboard-nav">
-        {/* Left Side: Glowing Blue Dot & Brand Title */}
+        {/* Left Side: Glowing Blue Dot & Brand Title with Workspace Tag */}
         <div className="brand-header-box">
           <span className="brand-glow-dot" />
           <span className="brand-title">OmniCall</span>
+          <span className="nav-workspace-pill">Workspace</span>
         </div>
 
-        {/* Right Side: Clean Profile Avatar with Dropdown Menu */}
-        <div className="user-dropdown-container" ref={userDropdownRef}>
+        {/* Center: System Status / Live Indicator */}
+        <div className="nav-center-status">
+          <span className="live-dot" />
+          <span>Real-time WebRTC Network</span>
+        </div>
+
+        {/* Right Side: Theme Toggle & User Profile */}
+        <div className="nav-right-actions">
           <button
-            className="user-avatar-nav-btn"
-            onClick={() => setShowUserDropdown((prev) => !prev)}
-            title="Account profile & settings"
-            aria-label="Account profile & settings"
+            type="button"
+            className="nav-theme-btn"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            aria-label="Toggle theme"
           >
-            <div className="avatar-circle-nav">
-              {(user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
-            </div>
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </button>
 
-          {showUserDropdown && (
-            <div className="user-nav-dropdown">
-              <div className="user-dropdown-header">
-                <div className="avatar-circle-nav" style={{ width: '38px', height: '38px', fontSize: '0.85rem' }}>
-                  {(user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
-                </div>
-                <div style={{ overflow: 'hidden', minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {user?.name || `@${user?.username}`}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                    @{user?.username || 'user'} {isAdmin && <span className="neutral-badge" style={{ marginLeft: '4px', fontSize: '0.65rem' }}>Admin</span>}
-                  </div>
-                </div>
+          <div className="user-dropdown-container" ref={userDropdownRef}>
+            <button
+              className="user-avatar-nav-btn"
+              onClick={() => setShowUserDropdown((prev) => !prev)}
+              title="Account profile & settings"
+              aria-label="Account profile & settings"
+            >
+              <div className="avatar-circle-nav">
+                {(user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
               </div>
+              <span className="nav-user-name-text">
+                {user?.name ? user.name.split(' ')[0] : user?.username || 'User'}
+              </span>
+            </button>
 
-              <div className="dropdown-divider" />
+            {showUserDropdown && (
+              <div className="user-nav-dropdown">
+                <div className="user-dropdown-header">
+                  <div className="avatar-circle-nav" style={{ width: '38px', height: '38px', fontSize: '0.85rem' }}>
+                    {(user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div style={{ overflow: 'hidden', minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {user?.name || `@${user?.username}`}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      @{user?.username || 'user'} {isAdmin && <span className="neutral-badge" style={{ marginLeft: '4px', fontSize: '0.65rem' }}>Admin</span>}
+                    </div>
+                  </div>
+                </div>
 
-              <button
-                className="dropdown-item-btn"
-                onClick={() => {
-                  setShowUserDropdown(false);
-                  setShowProfileModal(true);
-                }}
-              >
-                <Edit3 size={15} color="#3b82f6" />
-                <span>Account Profile</span>
-              </button>
+                <div className="dropdown-divider" />
 
-              {isAdmin && (
                 <button
                   className="dropdown-item-btn"
                   onClick={() => {
                     setShowUserDropdown(false);
-                    setShowAdminDirectory(true);
+                    setShowProfileModal(true);
                   }}
                 >
-                  <Shield size={15} color="#3b82f6" />
-                  <span>User Directory</span>
+                  <Edit3 size={15} color="#3b82f6" />
+                  <span>Account Profile</span>
                 </button>
-              )}
 
-              {isAdmin && (
+                {isAdmin && (
+                  <button
+                    className="dropdown-item-btn"
+                    onClick={() => {
+                      setShowUserDropdown(false);
+                      setShowAdminDirectory(true);
+                    }}
+                  >
+                    <Shield size={15} color="#3b82f6" />
+                    <span>User Directory</span>
+                  </button>
+                )}
+
+                {isAdmin && (
+                  <button
+                    className="dropdown-item-btn"
+                    onClick={() => {
+                      setShowUserDropdown(false);
+                      setActiveTab('health');
+                      fetchHealthMetrics();
+                    }}
+                  >
+                    <Activity size={15} color="#3b82f6" />
+                    <span>System Health</span>
+                  </button>
+                )}
+
                 <button
                   className="dropdown-item-btn"
                   onClick={() => {
-                    setShowUserDropdown(false);
-                    setActiveTab('health');
-                    fetchHealthMetrics();
+                    toggleTheme();
                   }}
                 >
-                  <Activity size={15} color="#3b82f6" />
-                  <span>System Health</span>
+                  {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+                  <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
                 </button>
-              )}
 
-              <button
-                className="dropdown-item-btn"
-                onClick={() => {
-                  toggleTheme();
-                }}
-              >
-                {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-                <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-              </button>
+                <div className="dropdown-divider" />
 
-              <div className="dropdown-divider" />
-
-              <button
-                className="dropdown-item-btn logout"
-                onClick={() => {
-                  setShowUserDropdown(false);
-                  onLogout();
-                }}
-              >
-                <LogOut size={15} />
-                <span>Logout</span>
-              </button>
-            </div>
-          )}
+                <button
+                  className="dropdown-item-btn logout"
+                  onClick={() => {
+                    setShowUserDropdown(false);
+                    onLogout();
+                  }}
+                >
+                  <LogOut size={15} />
+                  <span>Logout</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </nav>
 
@@ -624,18 +651,21 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         </div>
       )}
 
-      {/* ─── Hero Meeting Action Center (Mockup Target) ─── */}
+      {/* ─── Hero Meeting Action Center ─── */}
       <section className="hero-meeting-section">
         <div className="hero-glow-bloom" />
 
-        <button
-          className="hero-start-btn"
-          onClick={handleOpenStartMeeting}
-          title="Start a Meeting"
-        >
-          <Video size={18} />
-          <span>Start a Meeting</span>
-        </button>
+        <div className="hero-primary-wrap">
+          <button
+            className="hero-start-btn"
+            onClick={handleOpenStartMeeting}
+            title="Start an Instant Meeting"
+          >
+            <Video size={19} />
+            <span>Start a Meeting</span>
+            <span className="hero-start-sparkle"><Sparkles size={14} /></span>
+          </button>
+        </div>
 
         <div className="hero-cards-row">
           <div
@@ -644,8 +674,13 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
             role="button"
             tabIndex={0}
           >
-            <div className="hero-card-title">Create Room</div>
-            <div className="hero-card-desc">Create a room in extremely border glows effect</div>
+            <div className="hero-card-icon-box create">
+              <Plus size={22} />
+            </div>
+            <div className="hero-card-content">
+              <div className="hero-card-title">Create Room</div>
+              <div className="hero-card-desc">Set up a dedicated room with instant video, chat & screen share</div>
+            </div>
           </div>
 
           <div
@@ -654,14 +689,19 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
             role="button"
             tabIndex={0}
           >
-            <div className="hero-card-title">Join Room</div>
-            <div className="hero-card-desc">Join a frosted glows to premium, fleet</div>
+            <div className="hero-card-icon-box join">
+              <Users size={22} />
+            </div>
+            <div className="hero-card-content">
+              <div className="hero-card-title">Join Room</div>
+              <div className="hero-card-desc">Enter an ongoing meeting via room name or invite link</div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Navigation Feature Tabs */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '22px' }}>
+      {/* Navigation Feature Tabs & Actions */}
+      <div className="dash-tabs-bar-row">
         <div className="dash-nav-tabs">
           <button
             className={`dash-tab-btn ${activeTab === 'rooms' ? 'active' : ''}`}
@@ -693,12 +733,52 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
             </button>
           )}
         </div>
+
+        {activeTab === 'rooms' && (
+          <div className="dash-tab-actions">
+            <div className="dash-search-box">
+              <Search size={14} className="dash-search-icon" />
+              <input
+                type="text"
+                placeholder="Filter rooms..."
+                value={roomSearchFilter}
+                onChange={(e) => setRoomSearchFilter(e.target.value)}
+                className="dash-search-input"
+              />
+              {roomSearchFilter && (
+                <button
+                  type="button"
+                  onClick={() => setRoomSearchFilter('')}
+                  className="dash-search-clear-btn"
+                  title="Clear filter"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              className="dash-new-room-quick-btn"
+              onClick={() => setShowCreateRoomModal(true)}
+              title="Create new room"
+            >
+              <Plus size={14} /> New Room
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ─── TAB 1: YOUR ROOMS (Mockup Card Grid) ─── */}
+      {/* ─── TAB 1: YOUR ROOMS (Card Grid) ─── */}
       {activeTab === 'rooms' && (
         <section style={{ marginBottom: '36px' }}>
-          <h2 className="section-header-title">Your Rooms</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 className="section-header-title" style={{ margin: 0 }}>Your Rooms</h2>
+            {roomSearchFilter && (
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Showing {displayedRooms.length} of {rooms.length}
+              </span>
+            )}
+          </div>
 
           {loadingRooms ? (
             <div className="rooms-glow-grid">
@@ -711,7 +791,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               ))}
             </div>
           ) : rooms.length === 0 ? (
-            <div className="rooms-empty-box" style={{ textAlign: 'center', padding: '48px 20px', background: 'rgba(8, 12, 22, 0.5)', borderRadius: '16px', border: '1px dashed rgba(59, 130, 246, 0.2)', marginBottom: '24px' }}>
+            <div className="rooms-empty-box" style={{ textAlign: 'center', padding: '48px 20px', borderRadius: '16px', marginBottom: '24px' }}>
               <Video size={36} color="#3b82f6" style={{ margin: '0 auto 14px', opacity: 0.8 }} />
               <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>No video rooms yet</div>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', maxWidth: '360px', margin: '0 auto 18px' }}>
@@ -725,9 +805,27 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                 <Plus size={16} /> Create First Room
               </button>
             </div>
+          ) : displayedRooms.length === 0 ? (
+            <div className="rooms-empty-box" style={{ textAlign: 'center', padding: '36px 20px', borderRadius: '16px', marginBottom: '24px' }}>
+              <Search size={28} color="var(--text-muted)" style={{ margin: '0 auto 10px', opacity: 0.7 }} />
+              <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                No rooms match "{roomSearchFilter}"
+              </div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.825rem', marginBottom: '14px' }}>
+                Try adjusting your search query or clear the filter.
+              </p>
+              <button
+                type="button"
+                className="btn-outline"
+                style={{ fontSize: '0.8rem', padding: '6px 14px' }}
+                onClick={() => setRoomSearchFilter('')}
+              >
+                Clear Filter
+              </button>
+            </div>
           ) : (
             <div className="rooms-glow-grid">
-              {rooms.map((room) => {
+              {displayedRooms.map((room) => {
                 const participantCount = Number(room.active_count) || 0;
                 const isInviteOpen = showInviteForRoomId === room.id;
                 const realParticipants = Array.isArray(room.active_participants) ? room.active_participants : [];
@@ -736,28 +834,36 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                   <div key={room.id} className="room-glow-card">
                     <div>
                       <div className="room-card-header">
-                        <span className="room-card-title" title={room.name}>{room.name}</span>
-                        <span className="badge" style={{ textTransform: 'capitalize' }}>
+                        <div className="room-title-group">
+                          <div className="room-card-icon-badge">
+                            <Video size={15} />
+                          </div>
+                          <div>
+                            <span className="room-card-title" title={room.name}>{room.name}</span>
+                            <div className="room-card-role-sub">
+                              {room.role === 'owner' ? 'Created by you' : 'Joined as member'}
+                            </div>
+                          </div>
+                        </div>
+                        <span className={`room-role-pill ${room.role}`}>
                           {room.role}
                         </span>
                       </div>
 
                       {/* Real live participant status */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '8px 0 14px 0' }}>
+                      <div className="room-status-row">
                         {participantCount > 0 ? (
                           <>
                             <span className="live-dot" title={`${participantCount} live`} />
-                            <span className="badge" style={{ color: 'var(--success)', background: 'var(--success-bg)', border: '1px solid rgba(22,163,74,0.2)' }}>
-                              {participantCount} live
+                            <span className="room-status-live-badge">
+                              <Users size={11} /> {participantCount} live
                             </span>
                           </>
                         ) : (
-                          <>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--text-muted)', display: 'inline-block' }} title="No one in room" />
-                            <span className="badge" style={{ color: 'var(--text-secondary)', background: 'var(--surface-raised)', border: '1px solid var(--border)', fontSize: '0.7rem' }}>
-                              No one in room
-                            </span>
-                          </>
+                          <span className="room-status-idle-badge">
+                            <span className="idle-gray-dot" />
+                            <span>Ready to connect</span>
+                          </span>
                         )}
                       </div>
 
@@ -786,10 +892,10 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                       )}
                     </div>
 
-                    <div>
+                    <div className="room-card-footer-box">
                       {/* Inline Invite Box if toggled */}
                       {isInviteOpen && room.role === 'owner' && (
-                        <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                        <div className="room-inline-invite-box">
                           <input
                             className="form-control"
                             placeholder="Username or email..."
@@ -814,16 +920,16 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                           onMouseEnter={prefetchCallScreen}
                           onFocus={prefetchCallScreen}
                         >
-                          <Video size={13} /> Join call
+                          <Video size={13} /> Join Call
                         </button>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           {room.role === 'owner' && (
                             <button
-                              className="btn-ghost"
+                              className="room-action-icon-btn"
                               onClick={() => setShowInviteForRoomId(isInviteOpen ? null : room.id)}
                               title={isInviteOpen ? 'Close invite' : 'Invite participants'}
-                              style={{ padding: '6px', color: isInviteOpen ? '#60a5fa' : 'var(--text-secondary)' }}
+                              style={{ color: isInviteOpen ? '#3b82f6' : 'var(--text-muted)' }}
                             >
                               <UserPlus size={15} />
                             </button>
@@ -831,20 +937,18 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
 
                           {room.role === 'owner' ? (
                             <button
-                              className="btn-delete"
+                              className="room-action-icon-btn delete"
                               onClick={() => setDeletingRoomTarget(room)}
                               aria-label="Delete room"
                               title="Delete room"
-                              style={{ padding: '6px' }}
                             >
                               <Trash2 size={15} />
                             </button>
                           ) : (
                             <button
-                              className="btn-ghost"
+                              className="room-action-icon-btn leave"
                               onClick={() => setLeavingRoomTarget(room)}
                               title="Leave room"
-                              style={{ color: '#f59e0b', padding: '6px' }}
                             >
                               <LogOut size={15} />
                             </button>
