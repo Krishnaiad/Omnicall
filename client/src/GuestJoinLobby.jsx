@@ -83,7 +83,7 @@ export default function GuestJoinLobby({ inviteToken, onGuestJoinSuccess, onGoTo
 
         {preview && (
           <form onSubmit={handleJoin}>
-            <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '12px', marginBottom: '16px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            <div style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)', borderRadius: '8px', padding: '12px', marginBottom: '16px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               {preview.activeParticipants > 0 
                 ? `${preview.activeParticipants} ${preview.activeParticipants === 1 ? 'person is' : 'people are'} already in the call`
                 : 'No one has joined yet — you may be the first one in'}

@@ -527,10 +527,10 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                   {(user?.name || user?.username || 'U').slice(0, 2).toUpperCase()}
                 </div>
                 <div style={{ overflow: 'hidden', minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, color: '#ffffff', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {user?.name || `@${user?.username}`}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                     @{user?.username || 'user'} {isAdmin && <span className="neutral-badge" style={{ marginLeft: '4px', fontSize: '0.65rem' }}>Admin</span>}
                   </div>
                 </div>
@@ -711,10 +711,10 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               ))}
             </div>
           ) : rooms.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '48px 20px', background: 'rgba(8, 12, 22, 0.5)', borderRadius: '16px', border: '1px dashed rgba(59, 130, 246, 0.2)', marginBottom: '24px' }}>
+            <div className="rooms-empty-box" style={{ textAlign: 'center', padding: '48px 20px', background: 'rgba(8, 12, 22, 0.5)', borderRadius: '16px', border: '1px dashed rgba(59, 130, 246, 0.2)', marginBottom: '24px' }}>
               <Video size={36} color="#3b82f6" style={{ margin: '0 auto 14px', opacity: 0.8 }} />
-              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#ffffff', marginBottom: '6px' }}>No video rooms yet</div>
-              <p style={{ color: '#94a3b8', fontSize: '0.85rem', maxWidth: '360px', margin: '0 auto 18px' }}>
+              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>No video rooms yet</div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', maxWidth: '360px', margin: '0 auto 18px' }}>
                 Create your first room or click "Start a Meeting" above to jump straight into a call!
               </p>
               <button
@@ -823,7 +823,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                               className="btn-ghost"
                               onClick={() => setShowInviteForRoomId(isInviteOpen ? null : room.id)}
                               title={isInviteOpen ? 'Close invite' : 'Invite participants'}
-                              style={{ padding: '6px', color: isInviteOpen ? '#60a5fa' : '#94a3b8' }}
+                              style={{ padding: '6px', color: isInviteOpen ? '#60a5fa' : 'var(--text-secondary)' }}
                             >
                               <UserPlus size={15} />
                             </button>
@@ -1185,7 +1185,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         <div className="modal-backdrop" onClick={() => setShowStartMeetingModal(false)}>
           <div className="glass-card modal-box" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.15rem', color: '#ffffff' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.15rem', color: 'var(--text-primary)' }}>
                 <Video size={18} color="#3b82f6" /> Start a Meeting
               </div>
               <button onClick={() => setShowStartMeetingModal(false)} className="btn-ghost" style={{ padding: '4px' }}>
@@ -1194,7 +1194,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
             </div>
             <form onSubmit={handleStartMeetingSubmit}>
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontSize: '0.8125rem', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
                   Room Name
                 </label>
                 <input
@@ -1210,7 +1210,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               </div>
 
               <div style={{ marginBottom: '20px' }}>
-                <label style={{ fontSize: '0.8125rem', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
                   Display Name in Call
                 </label>
                 <input
@@ -1242,7 +1242,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         <div className="modal-backdrop" onClick={() => setShowCreateRoomModal(false)}>
           <div className="glass-card modal-box" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.15rem', color: '#ffffff' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.15rem', color: 'var(--text-primary)' }}>
                 <Video size={18} color="#3b82f6" /> Create a New Room
               </div>
               <button onClick={() => setShowCreateRoomModal(false)} className="btn-ghost" style={{ padding: '4px' }}>
@@ -1254,7 +1254,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
               setShowCreateRoomModal(false);
             }}>
               <div style={{ marginBottom: '18px' }}>
-                <label style={{ fontSize: '0.8125rem', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
                   Room Name
                 </label>
                 <input
@@ -1286,7 +1286,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
         <div className="modal-backdrop" onClick={() => setShowJoinRoomModal(false)}>
           <div className="glass-card modal-box" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.15rem', color: '#ffffff' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '1.15rem', color: 'var(--text-primary)' }}>
                 <Video size={18} color="#3b82f6" /> Join a Room
               </div>
               <button onClick={() => setShowJoinRoomModal(false)} className="btn-ghost" style={{ padding: '4px' }}>
@@ -1295,16 +1295,17 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
             </div>
             
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '0.8125rem', color: '#94a3b8', display: 'block', marginBottom: '8px' }}>
+              <label style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>
                 Pick from Your Video Rooms:
               </label>
               {rooms.length === 0 ? (
-                <p style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '16px' }}>No rooms available. Create one to get started!</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', textAlign: 'center', padding: '16px' }}>No rooms available. Create one to get started!</p>
               ) : (
                 <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
                   {rooms.map((r) => (
                     <div
                       key={r.id}
+                      className="join-room-picker-item"
                       onClick={() => {
                         setShowJoinRoomModal(false);
                         promptJoin(r);
@@ -1312,8 +1313,6 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                       style={{
                         padding: '10px 14px',
                         borderRadius: '10px',
-                        background: 'rgba(59, 130, 246, 0.08)',
-                        border: '1px solid rgba(59, 130, 246, 0.2)',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
@@ -1321,7 +1320,7 @@ export default function Dashboard({ token, user, initialBootstrap, onLogout, onJ
                         transition: 'all 140ms ease'
                       }}
                     >
-                      <span style={{ fontWeight: 500, color: '#ffffff', fontSize: '0.9rem' }}>{r.name}</span>
+                      <span style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{r.name}</span>
                       <span className="badge" style={{ color: '#93c5fd', background: 'rgba(59, 130, 246, 0.18)', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
                         {r.active_count > 0 ? `${r.active_count} live` : 'Join'}
                       </span>

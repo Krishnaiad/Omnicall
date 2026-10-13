@@ -2,6 +2,7 @@
 [data-theme="dark"] {
   /* ── Deep Space Glow ── */
   --bg: #000000;                   /* Pure black — the void */
+  --bg-radial: radial-gradient(ellipse 85% 60% at 50% -8%, rgba(59, 130, 246, 0.48) 0%, rgba(37, 99, 235, 0.22) 32%, rgba(29, 78, 216, 0.08) 55%, transparent 75%);
   --surface: #060A14;              /* Cards / primary surfaces */
   --surface-raised: #090E1A;       /* Secondary surfaces, inputs */
   --surface-elevated: #0C1220;     /* Modals, popovers */
@@ -61,45 +62,53 @@
 
 
 [data-theme="light"] {
-  --bg: #F8FAFC;              /* Main application background */
-  --surface: #FFFFFF;         /* Cards and primary surfaces */
-  --surface-raised: #F1F5F9;  /* Secondary surface (inputs, panels, headers) */
-  --surface-elevated: #FFFFFF;/* Elevated surface */
-  --surface-hover: #F4F7FF;   /* Primary Ultra Light (subtle blue tint) */
-  --surface-hover-strong: #E8F0FF; /* Primary Light */
+  /* ── Azure Ice & Crisp White ── */
+  --bg: #F0F6FF;                     /* Airy light azure blue background */
+  --bg-radial: radial-gradient(ellipse 90% 60% at 50% -5%, rgba(191, 219, 254, 0.75) 0%, rgba(219, 234, 254, 0.45) 35%, rgba(240, 246, 255, 0.15) 65%, #F0F6FF 100%);
+  --surface: #FFFFFF;                /* Pristine white surfaces & cards */
+  --surface-raised: #F8FAFC;         /* Soft light slate for elevated rows / inputs */
+  --surface-elevated: #FFFFFF;       /* Modals and popovers */
+  --surface-hover: #EFF6FF;          /* Light blue hover tint */
+  --surface-hover-strong: #DBEAFE;   /* Active selection tint */
 
-  --text-primary: #0F172A;    /* Primary text */
-  --text-secondary: #475569;  /* Secondary text */
-  --text-muted: #94A3B8;      /* Muted text */
-  --border: #E2E8F0;          /* Subtle borders */
-  --border-strong: #D5DFEC;   /* Outline button border */
-  --border-blue: #BFD3FF;     /* Blue border on hover */
+  --text-primary: #0F172A;           /* Deep midnight slate for high contrast */
+  --text-secondary: #475569;         /* Slate 600 */
+  --text-muted: #64748B;             /* Slate 500 */
+  --border: rgba(191, 219, 254, 0.75); /* Soft sky blue border */
+  --border-strong: rgba(147, 197, 253, 0.9); /* Defined blue outline */
+  --border-blue: #3B82F6;            /* Hover focus blue */
 
-  --accent: #0B5CFF;          /* Main brand blue (Zoom-inspired modern SaaS) */
-  --accent-hover: #0047D6;    /* Primary hover */
-  --accent-active: #0039AD;   /* Primary active/pressed */
-  --accent-bg: #E8F0FF;       /* Primary light tint (subtle blue backgrounds) */
-  --accent-ultra-light: #F4F7FF; /* Primary ultra light */
+  --accent: #2563EB;                 /* Vivid modern royal blue */
+  --accent-hover: #1D4ED8;           /* Rich blue hover */
+  --accent-active: #1E40AF;          /* Deep blue pressed */
+  --accent-bg: rgba(219, 234, 254, 0.65); /* Soft blue badge background */
+  --accent-ultra-light: rgba(239, 246, 255, 0.85);
 
-  --success: #16A34A;         /* Success */
-  --success-hover: #15803D;   /* Success hover */
+  /* Glow tokens in Light Mode */
+  --glow-sm: 0 0 10px rgba(37, 99, 235, 0.25);
+  --glow-md: 0 0 20px rgba(37, 99, 235, 0.3), 0 0 6px rgba(37, 99, 235, 0.15);
+  --glow-lg: 0 0 35px rgba(37, 99, 235, 0.35);
+  --glow-danger: 0 0 20px rgba(239, 68, 68, 0.35);
+
+  --success: #16A34A;
+  --success-hover: #15803D;
   --success-bg: #DCFCE7;
 
-  --danger: #DC2626;          /* Error / Danger */
-  --danger-bg: #FEF2F2;       /* Error light background */
-  --danger-border: #FECACA;   /* Error border on hover */
+  --danger: #DC2626;
+  --danger-bg: #FEF2F2;
+  --danger-border: #FECACA;
 
-  --warning: #F59E0B;         /* Warning */
+  --warning: #F59E0B;
   --warning-bg: #FEF3C7;
 
-  --info: #2563EB;            /* Information */
+  --info: #2563EB;
 
-  --card-hover-bg: #F8FAFF;
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  --card-hover-shadow: 0 4px 14px rgba(11, 92, 255, 0.08);
-  --modal-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
-  --btn-primary-shadow: 0 2px 6px rgba(11, 92, 255, 0.15);
-  --btn-primary-hover-shadow: 0 4px 12px rgba(11, 92, 255, 0.18);
+  --card-hover-bg: #FFFFFF;
+  --card-shadow: 0 4px 20px -2px rgba(191, 219, 254, 0.35), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --card-hover-shadow: 0 12px 32px -4px rgba(59, 130, 246, 0.2), 0 4px 10px rgba(15, 23, 42, 0.06);
+  --modal-shadow: 0 20px 48px -8px rgba(30, 58, 138, 0.18), 0 0 0 1px rgba(191, 219, 254, 0.6);
+  --btn-primary-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+  --btn-primary-hover-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
 
   /* Backward-compatible aliases */
   --bg-dark: var(--bg);
@@ -121,8 +130,8 @@
 
 body {
   font-family: var(--font-family);
-  background-color: #000000;
-  background-image: radial-gradient(ellipse 85% 60% at 50% -8%, rgba(59, 130, 246, 0.48) 0%, rgba(37, 99, 235, 0.22) 32%, rgba(29, 78, 216, 0.08) 55%, transparent 75%);
+  background-color: var(--bg);
+  background-image: var(--bg-radial);
   background-repeat: no-repeat;
   background-attachment: fixed;
   color: var(--text-primary);
@@ -130,6 +139,12 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   transition: background-color 200ms ease, color 200ms ease;
+}
+
+[data-theme="light"] body {
+  background-color: #F0F6FF;
+  background-image: radial-gradient(ellipse 90% 60% at 50% -5%, rgba(191, 219, 254, 0.75) 0%, rgba(219, 234, 254, 0.45) 35%, rgba(240, 246, 255, 0.15) 65%, #F0F6FF 100%);
+  color: #0F172A;
 }
 
 /* Custom Scrollbar */
@@ -1033,6 +1048,334 @@ input, select, textarea {
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(59, 130, 246, 0.14);
   margin-top: 16px;
+}
+
+.join-room-picker-item {
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.join-room-picker-item:hover {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PREMIUM LIGHT MODE THEME: AZURE & WHITE HARMONY
+   ════════════════════════════════════════════════════════════════ */
+[data-theme="light"] .dashboard-nav {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(191, 219, 254, 0.8);
+  box-shadow: 0 4px 20px rgba(191, 219, 254, 0.4), 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="light"] .brand-title {
+  color: #0F172A;
+}
+
+[data-theme="light"] .brand-glow-dot {
+  background: #2563EB;
+  box-shadow: 0 0 14px 2px rgba(37, 99, 235, 0.6), 0 0 4px #93C5FD;
+}
+
+/* User Avatar & Dropdown */
+[data-theme="light"] .avatar-circle-nav {
+  background: linear-gradient(135deg, #2563EB, #1D4ED8);
+  color: #FFFFFF;
+  border: 2px solid rgba(191, 219, 254, 0.9);
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.25);
+}
+
+[data-theme="light"] .user-avatar-nav-btn:hover .avatar-circle-nav {
+  border-color: #2563EB;
+  box-shadow: 0 0 16px rgba(37, 99, 235, 0.45);
+}
+
+[data-theme="light"] .user-nav-dropdown {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(191, 219, 254, 0.85);
+  box-shadow: 0 16px 36px rgba(30, 58, 138, 0.12), 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+
+[data-theme="light"] .dropdown-divider {
+  background: rgba(191, 219, 254, 0.6);
+}
+
+[data-theme="light"] .dropdown-item-btn {
+  color: #334155;
+}
+
+[data-theme="light"] .dropdown-item-btn:hover {
+  background: #EFF6FF;
+  color: #1D4ED8;
+}
+
+[data-theme="light"] .dropdown-item-btn.logout {
+  color: #DC2626;
+}
+
+[data-theme="light"] .dropdown-item-btn.logout:hover {
+  background: #FEF2F2;
+  color: #B91C1C;
+}
+
+/* Hero Meeting Action Center */
+[data-theme="light"] .hero-glow-bloom {
+  background: radial-gradient(ellipse at 50% 25%, rgba(147, 197, 253, 0.55) 0%, rgba(191, 219, 254, 0.35) 40%, rgba(224, 238, 255, 0.15) 70%, transparent 85%);
+}
+
+[data-theme="light"] .hero-start-btn {
+  background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35), 0 2px 6px rgba(37, 99, 235, 0.2);
+}
+
+[data-theme="light"] .hero-start-btn:hover {
+  box-shadow: 0 10px 28px rgba(37, 99, 235, 0.45), 0 4px 10px rgba(37, 99, 235, 0.3);
+}
+
+[data-theme="light"] .hero-action-card {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(191, 219, 254, 0.85);
+  box-shadow: 0 4px 20px rgba(191, 219, 254, 0.35), 0 1px 4px rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="light"] .hero-action-card:hover {
+  background: #FFFFFF;
+  border-color: rgba(96, 165, 250, 0.9);
+  box-shadow: 0 12px 32px rgba(59, 130, 246, 0.22), 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+
+[data-theme="light"] .hero-card-title {
+  color: #0F172A;
+}
+
+[data-theme="light"] .hero-card-desc {
+  color: #475569;
+}
+
+/* Dashboard Feature Tabs */
+[data-theme="light"] .dash-nav-tabs {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(191, 219, 254, 0.8);
+  box-shadow: 0 2px 10px rgba(191, 219, 254, 0.3);
+}
+
+[data-theme="light"] .dash-tab-btn {
+  color: #64748B;
+}
+
+[data-theme="light"] .dash-tab-btn:hover {
+  color: #1D4ED8;
+  background: rgba(239, 246, 255, 0.8);
+}
+
+[data-theme="light"] .dash-tab-btn.active {
+  background: #FFFFFF;
+  color: #1D4ED8;
+  border-color: rgba(147, 197, 253, 0.9);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
+  font-weight: 600;
+}
+
+/* Modern Your Rooms Grid */
+[data-theme="light"] .section-header-title {
+  color: #0F172A;
+}
+
+[data-theme="light"] .room-glow-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(191, 219, 254, 0.85);
+  box-shadow: 0 4px 18px rgba(191, 219, 254, 0.28), 0 1px 3px rgba(15, 23, 42, 0.03);
+}
+
+[data-theme="light"] .room-glow-card:hover {
+  background: #FFFFFF;
+  border-color: rgba(96, 165, 250, 0.9);
+  box-shadow: 0 10px 28px rgba(37, 99, 235, 0.18), 0 2px 6px rgba(15, 23, 42, 0.05);
+}
+
+[data-theme="light"] .room-card-title {
+  color: #0F172A;
+}
+
+[data-theme="light"] .room-card-subtitle {
+  color: #64748B;
+}
+
+[data-theme="light"] .room-card-badge {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+}
+
+[data-theme="light"] .room-card-actions {
+  border-top: 1px solid rgba(191, 219, 254, 0.6);
+}
+
+[data-theme="light"] .btn-join-glow {
+  background: rgba(239, 246, 255, 0.95);
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+}
+
+[data-theme="light"] .btn-join-glow:hover {
+  background: #2563EB;
+  color: #FFFFFF;
+  border-color: #2563EB;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+}
+
+[data-theme="light"] .avatar-stack-item {
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+}
+
+[data-theme="light"] .rooms-empty-box {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border: 1px dashed rgba(147, 197, 253, 0.85) !important;
+}
+
+/* Modals & Popovers */
+[data-theme="light"] .modal-backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+[data-theme="light"] .modal-box {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  box-shadow: 0 20px 48px -8px rgba(30, 58, 138, 0.18), 0 0 0 1px rgba(191, 219, 254, 0.6);
+}
+
+[data-theme="light"] .form-control {
+  background: #F8FAFC;
+  border: 1px solid rgba(191, 219, 254, 0.85);
+  color: #0F172A;
+}
+
+[data-theme="light"] .form-control:hover:not(:focus) {
+  background: #FFFFFF;
+  border-color: #93C5FD;
+}
+
+[data-theme="light"] .form-control:focus {
+  background: #FFFFFF;
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18), 0 0 12px rgba(37, 99, 235, 0.12);
+}
+
+[data-theme="light"] .btn-outline {
+  background: #FFFFFF;
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  color: #1E293B;
+}
+
+[data-theme="light"] .btn-outline:hover:not(:disabled) {
+  background: #EFF6FF;
+  border-color: #93C5FD;
+  color: #1D4ED8;
+}
+
+[data-theme="light"] .btn-ghost {
+  color: #64748B;
+}
+
+[data-theme="light"] .btn-ghost:hover {
+  background: #EFF6FF;
+  color: #1D4ED8;
+}
+
+[data-theme="light"] .join-room-picker-item {
+  background: rgba(239, 246, 255, 0.85) !important;
+  border: 1px solid rgba(191, 219, 254, 0.8) !important;
+}
+
+[data-theme="light"] .join-room-picker-item:hover {
+  background: #FFFFFF !important;
+  border-color: #60A5FA !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12) !important;
+}
+
+[data-theme="light"] .join-room-picker-item .badge {
+  color: #1D4ED8 !important;
+  background: #DBEAFE !important;
+  border: 1px solid #BFDBFE !important;
+}
+
+/* AuthScreen & Tab Groups */
+[data-theme="light"] .auth-box {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(191, 219, 254, 0.85);
+  box-shadow: 0 16px 40px rgba(30, 58, 138, 0.12);
+}
+
+[data-theme="light"] .tab-group {
+  background: #EFF6FF;
+  border: 1px solid rgba(191, 219, 254, 0.8);
+}
+
+[data-theme="light"] .tab-btn {
+  color: #64748B;
+}
+
+[data-theme="light"] .tab-btn.active {
+  background: #2563EB;
+  color: #FFFFFF;
+}
+
+/* Media & Memory Cards */
+[data-theme="light"] .memory-card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(191, 219, 254, 0.85);
+  box-shadow: 0 4px 18px rgba(191, 219, 254, 0.28);
+}
+
+[data-theme="light"] .memory-card:hover {
+  border-color: rgba(96, 165, 250, 0.9);
+  box-shadow: 0 10px 28px rgba(37, 99, 235, 0.18);
+}
+
+/* Chat & Panels */
+[data-theme="light"] .chat-sidebar {
+  background: rgba(255, 255, 255, 0.96);
+  border-left: 1px solid rgba(191, 219, 254, 0.7);
+  box-shadow: -4px 0 24px rgba(191, 219, 254, 0.3);
+}
+
+[data-theme="light"] .chat-header {
+  border-bottom: 1px solid rgba(191, 219, 254, 0.6);
+  color: #0F172A;
+}
+
+[data-theme="light"] .chat-msg {
+  background: rgba(240, 246, 255, 0.85);
+  border: 1px solid rgba(191, 219, 254, 0.5);
+  color: #0F172A;
+}
+
+[data-theme="light"] .chat-msg-sender {
+  color: #1D4ED8;
+}
+
+[data-theme="light"] .chat-msg-time {
+  color: #94A3B8;
+}
+
+/* Skeleton Loading in Light Mode */
+[data-theme="light"] .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(191, 219, 254, 0.25) 25%,
+    rgba(219, 234, 254, 0.5) 37%,
+    rgba(191, 219, 254, 0.25) 63%
+  );
+  background-size: 400% 100%;
+}
+
+[data-theme="light"] .room-skeleton-item {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(191, 219, 254, 0.6);
 }
 
 .dash-stats {
